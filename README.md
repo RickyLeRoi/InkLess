@@ -1,12 +1,9 @@
-# Documento di Specifica Progetto: CartaCanta / InkLess
-**Da fornire come system prompt / contesto architetturale a Claude (o altri LLM) per lo sviluppo.**
+# InkLess
 
 ---
 
 ## 1. Visione d'Insieme
 Il progetto, temporaneamente chiamato **CartaCanta** o **InkLess**, è una piattaforma web ibrida (digitale/fisica) che permette agli utenti di lasciare brevi messaggi su una bacheca digitale e, tramite una piccola donazione, stamparli fisicamente su una stampante termica situata a casa dell'amministratore.
-
-**Obiettivo per Claude:** Sviluppare l'intera architettura software (Frontend, Backend, Script Hardware e configurazioni Docker), tenendo conto che l'utente è uno sviluppatore esperto e richiede codice pulito, modulare e focalizzato sulla sicurezza.
 
 ---
 
@@ -69,7 +66,7 @@ Quando un utente sceglie di stampare un messaggio (suo o di altri):
 
 ---
 
-## 5. Vincoli di Sicurezza da Rispettare (Istruzioni Cruciali per Claude)
+## 5. Vincoli di Sicurezza da Rispettare 
 1. **Zero-Trust Network:** Nessuna esposizione diretta. Tutte le API passano per il Cloudflare Tunnel.
 2. **Protezione API e Rate Limiting:** Implementare rate-limiting aggressivo su Node.js per prevenire spam di messaggi (es. max 3 messaggi/ora per IP) e DDoS sul form di donazione.
 3. **Validazione Input:** Tutti gli input (testo, IG ID) devono essere severamente sanitizzati contro XSS (sia lato client che server).
@@ -89,5 +86,3 @@ Quando un utente sceglie di stampare un messaggio (suo o di altri):
 - **Modello Webcam:** Da definire (probabile interfaccia USB/V4L2).
 - **Provider di Pagamento:** **Stripe** (deciso). PayPal resta un'alternativa non scartata, quindi l'integrazione va tenuta dietro un'astrazione neutra rispetto al provider.
 
----
-**Istruzione Finale per Claude:** Utilizza questo README come base architetturale. Inizia strutturando il boilerplate per il backend in Node.js (con Express/Fastify e SQLite), proponi un layout frontend (HTML/CSS/JS) che simuli lo scontrino, e prepara gli script Python (RPi 4) per simulare l'ascolto della coda di stampa e registrazione video.
