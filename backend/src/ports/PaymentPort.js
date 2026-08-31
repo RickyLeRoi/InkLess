@@ -25,7 +25,14 @@
  *
  * @typedef {object} PaymentPort
  * @property {(request: CheckoutRequest) => Promise<CheckoutTicket>} createCheckout
- * @property {(rawBody: Buffer, headers: Record<string, string>) => Promise<PaymentConfirmation>} verifyCallback
+ * @property {VerifyCallback} verifyCallback
+ */
+
+/**
+ * @callback VerifyCallback
+ * @param {Buffer} rawBody
+ * @param {Record<string, string>} headers
+ * @returns {Promise<PaymentConfirmation>}
  */
 
 export {};

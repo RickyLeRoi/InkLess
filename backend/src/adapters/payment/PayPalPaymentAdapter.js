@@ -37,9 +37,17 @@ const CERT_HOSTS = Object.freeze([
  *
  * Satisfies the PaymentPort contract.
  */
+/**
+ * @typedef {object} PayPalCredentials
+ * @property {string} clientId
+ * @property {string} clientSecret
+ * @property {string} webhookId
+ * @property {string} [environment]
+ */
+
 export class PayPalPaymentAdapter {
   /**
-   * @param {{ clientId: string, clientSecret: string, webhookId: string, environment?: string }} credentials
+   * @param {PayPalCredentials} credentials
    */
   constructor({ clientId, clientSecret, webhookId, environment = 'live' }) {
     if (!clientId || !clientSecret || !webhookId) {

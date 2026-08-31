@@ -37,7 +37,6 @@ services:
     tmpfs:
       - /tmp
 
-  # 20260831 ++ RG #frontend_deploy
   inkless-frontend:
     build:
       context: ..

@@ -12,11 +12,23 @@
  * @typedef {object} MessageRepository
  * @property {(message: import('../domain/Message.js').Message) => Promise<void>} save
  * @property {(id: string) => Promise<import('../domain/Message.js').Message | null>} findById
- * @property {(query: BoardQuery) => Promise<{ items: import('../domain/Message.js').Message[], total: number }>} findApproved
+ * @property {FindApproved} findApproved
  * @property {(status: string) => Promise<import('../domain/Message.js').Message[]>} findByStatus
  * @property {() => Promise<number>} countAwaitingLlm
  * @property {(limit: number) => Promise<import('../domain/Message.js').Message[]>} findAwaitingLlm
  * @property {() => Promise<number>} nextAnonymousSequence
+ */
+
+/**
+ * @typedef {object} BoardResult
+ * @property {import('../domain/Message.js').Message[]} items
+ * @property {number} total
+ */
+
+/**
+ * @callback FindApproved
+ * @param {BoardQuery} query
+ * @returns {Promise<BoardResult>}
  */
 
 export {};
