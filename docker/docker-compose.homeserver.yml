@@ -6,10 +6,14 @@
 # The tunnel's public hostname must point at http://inkless-frontend:80 — nginx serves the built
 # site and forwards /api to the backend, so the browser only ever sees one origin.
 #
-# Every value comes from the untracked .env. Compose interpolates ${...} at parse time
-# from the file given by --env-file, so run this from the repository root:
+# Every value comes from the untracked .env.homeserver. Compose interpolates ${...} at
+# parse time from the file given by --env-file, so run this from the repository root:
 #
-#   docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
+#   docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml up -d
+#
+# 20260831 ** RG #split_env_per_host
+# Deliberately not a shared .env: the hardware node reads .env.rpi, which carries no
+# payment key, no admin password and no tunnel token.
 
 services:
   # Service names carry the project prefix on purpose: this file is not always the
@@ -23,7 +27,7 @@ services:
       dockerfile: docker/backend.Dockerfile
     restart: unless-stopped
     # NODE_ENV, HOST, PORT and every secret are injected from here, not restated below.
-    env_file: ../.env
+    env_file: ../.env.homeserver
     volumes:
       - inkless-data:/app/data
     networks:

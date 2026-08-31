@@ -77,6 +77,13 @@ export function loadConfig() {
       ? required('HARDWARE_TOKEN')
       : (process.env.HARDWARE_TOKEN ?? 'inkless-dev-hardware'),
 
+    // 20260831 ++ RG #hardware_channel_is_not_for_everyone
+    // Addresses allowed to reach /internal at all, on top of the token. The home LAN is
+    // flat, so "has the token" would otherwise mean every ESP32, tablet and guest phone
+    // in the house is one leaked .env away from the print queue. Empty means no address
+    // check, which is what development and the e2e stack need.
+    hardwareAllowedIps: list('HARDWARE_ALLOWED_IPS', []),
+
     moderation: {
       // Queue depth at which the pending backlog is handed to the model.
       llmThreshold: integer('MODERATION_LLM_THRESHOLD', 50),

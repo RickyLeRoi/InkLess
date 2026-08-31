@@ -3,10 +3,14 @@
 # Runs on the hardware node. This node is never reachable from the internet: it dials
 # the backend on the LAN and pushes the stream outbound, nothing else.
 #
-# Every value comes from the untracked .env. Compose interpolates ${...} at parse time
-# from the file given by --env-file, so run this from the repository root:
+# Every value comes from the untracked .env.rpi. Compose interpolates ${...} at parse
+# time from the file given by --env-file, so run this from the repository root:
 #
-#   docker compose --env-file .env -f docker/docker-compose.rpi.yml up -d
+#   docker compose --env-file .env.rpi -f docker/docker-compose.rpi.yml up -d
+#
+# 20260831 ** RG #split_env_per_host
+# .env.rpi, never the home server's file. This node has a printer bolted to it and a
+# camera on top; it must not be able to leak a payment key or the admin password.
 
 services:
   daemon:
@@ -17,7 +21,7 @@ services:
     restart: unless-stopped
     # BACKEND_URL, PRINTER_KIND, RECORDER_KIND, UPLOADER_KIND and the storage keys are
     # injected from here, not restated below.
-    env_file: ../.env
+    env_file: ../.env.rpi
     devices:
       # python-escpos opens the printer via libusb (pyusb), which scans the
       # whole USB tree for the vendor/product match — not a fixed node like
@@ -44,7 +48,7 @@ services:
     # Opt-in: an empty STREAM_INGEST_URL would leave ffmpeg with a truncated command, so
     # the service starts only on `--profile stream`, never by accident.
     profiles: ["stream"]
-    env_file: ../.env
+    env_file: ../.env.rpi
     devices:
       - "${WEBCAM_DEVICE:-/dev/video0}:${WEBCAM_DEVICE:-/dev/video0}"
     volumes:

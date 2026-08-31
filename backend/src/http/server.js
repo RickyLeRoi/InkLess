@@ -3,6 +3,7 @@
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
+import { createSqliteRateLimitStore } from '../adapters/rateLimit/SqliteRateLimitStore.js';
 import { publicClientKey } from './clientAddress.js';
 import { registerErrorHandler } from './errors.js';
 import { adminRoutes } from './routes/adminRoutes.js';
@@ -57,7 +58,12 @@ export async function buildServer(deps) {
     // CF-Connecting-IP is the per-visitor value, and the edge overwrites it on every
     // request, so it cannot be dictated from the internet. Route-level configs inherit
     // this generator, so submit and print are keyed the same way.
-    keyGenerator: publicClientKey
+    keyGenerator: publicClientKey,
+    // 20260831 ++ RG #rate_limit_survives_a_restart
+    // The default store is an in-process LRU, so every deploy reset every counter.
+    // Persisted in the database that is already open — no new dependency, and a
+    // container that restarts no longer hands out a clean slate.
+    store: createSqliteRateLimitStore(deps.db)
   });
 
   // 20260831 ** RG #health_says_only_that_it_is_up

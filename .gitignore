@@ -1,7 +1,10 @@
 # Secrets
+# 20260831 ** RG #split_env_per_host
+# One .env per machine now (.env.homeserver, .env.rpi), so the un-ignore has to match
+# the .example suffix wherever it lands, not just the single old filename.
 .env
 .env.*
-!.env.example
+!.env.*.example
 
 # Node
 node_modules/

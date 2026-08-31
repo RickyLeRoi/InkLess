@@ -59,7 +59,8 @@ openssl rand -base64 24  # ADMIN_PASSWORD
 
 ### `.env` sull'home server
 
-Parti da [.env.example](.env.example) e compila **tutto**. In particolare:
+Parti da [.env.homeserver.example](.env.homeserver.example), copialo in
+`.env.homeserver` e compila **tutto**. In particolare:
 
 | Variabile | Valore |
 |---|---|
@@ -68,6 +69,8 @@ Parti da [.env.example](.env.example) e compila **tutto**. In particolare:
 | `PUBLIC_BASE_URL` / `CORS_ORIGIN` | `https://<dominio>` |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | credenziali della dashboard di moderazione |
 | `HARDWARE_TOKEN` | il segreto generato sopra |
+| `HARDWARE_ALLOWED_IPS` | l'IP LAN del Raspberry. Il canale `/internal` controlla l'indirizzo del socket **oltre** al token: la rete di casa e piatta, quindi senza questo un token che esce di mano vale per ogni dispositivo collegato. Vuoto = nessun controllo, solo per lo sviluppo |
+| `TRUSTED_PROXIES` | quali hop possono dire chi e il chiamante. Il default `loopback,uniquelocal` copre nginx e cloudflared. Chi e elencato qui puo dettare l'indirizzo su cui sono contati i rate limit: tienilo stretto |
 | `CLOUDFLARE_TUNNEL_TOKEN` | dal passo 2 |
 | `PAYMENT_PROVIDER` | `stripe` o `paypal`. In produzione `fake` viene rifiutato |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | dalla dashboard Stripe, solo con `PAYMENT_PROVIDER=stripe` |
@@ -78,7 +81,8 @@ Parti da [.env.example](.env.example) e compila **tutto**. In particolare:
 
 ### `.env` sul Raspberry
 
-Solo quello che serve a stampare. Niente Stripe, niente admin, niente tunnel:
+Parti da [.env.rpi.example](.env.rpi.example) e copialo in `.env.rpi`. Solo quello che
+serve a stampare: niente Stripe, niente admin, niente tunnel.
 
 ```bash
 BACKEND_URL=http://<home-server-ip>:3000
@@ -130,11 +134,11 @@ la topologia. Se ti ritrovi a fare port forwarding, hai sbagliato strada.
 ```bash
 git clone <repo> /opt/inkless
 cd /opt/inkless
-cp .env.example .env
-$EDITOR .env                      # compila come da passo 1
-chmod 600 .env
+cp .env.homeserver.example .env.homeserver
+$EDITOR .env.homeserver           # compila come da passo 1
+chmod 600 .env.homeserver
 
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d --build
+docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml up -d --build
 ```
 
 > **Il flag `--env-file` non è opzionale.** Compose risolve i `${...}` del file compose
@@ -155,8 +159,8 @@ volta sola prima di poter scaricare.
 # una tantum: token classico con scope read:packages, da github.com/settings/tokens
 echo <token> | docker login ghcr.io -u <utente-github> --password-stdin
 
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml pull
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
+docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml pull
+docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml up -d
 ```
 
 `--build` resta lì per un motivo solo: testare una modifica che non hai ancora pushato.
@@ -188,7 +192,7 @@ altri servizi, ci sono due strade.
 **Tenerli separati.** Non tocchi nulla: restano due progetti Compose distinti.
 
 ```bash
-docker compose -p inkless --env-file .env -f docker/docker-compose.homeserver.yml up -d --build
+docker compose -p inkless --env-file .env.homeserver -f docker/docker-compose.homeserver.yml up -d --build
 ```
 
 Costa un secondo `cloudflared`, e quindi **un secondo tunnel con un token suo**. Riusare lo
@@ -198,8 +202,8 @@ delle richieste finisce su quello che il servizio non ce l'ha.
 **Fondere i servizi nello stack esistente.** Riusi il `cloudflared` che c'è già. Copi
 `inkless-backend` e `inkless-frontend` dentro il `services:` dell'altro file, con due
 aggiustamenti: `build.context` diventa il percorso assoluto del repo sul server, e
-`env_file` punta al `.env` del repo — non a quello dello stack ospite, che resta riservato
-alle interpolazioni `${...}`. In fondo aggiungi le reti:
+`env_file` punta al `.env.homeserver` del repo — non a quello dello stack ospite, che resta
+riservato alle interpolazioni `${...}`. In fondo aggiungi le reti:
 
 ```yaml
 networks:
@@ -265,7 +269,9 @@ cd /opt/inkless/hardware
 sudo python3 -m venv .venv
 sudo .venv/bin/pip install -r requirements.txt
 
-sudo cp /percorso/del/tuo/.env /opt/inkless/.env
+# Quello del Pi, non quello dell'home server: se questo nodo viene compromesso, il
+# danno deve fermarsi alla stampante.
+sudo cp /percorso/del/tuo/.env.rpi /opt/inkless/.env
 sudo chown inkless:inkless /opt/inkless/.env
 sudo chmod 600 /opt/inkless/.env
 ```
@@ -443,8 +449,8 @@ Lo stesso context serve per qualsiasi altro comando: basta anteporre `--context 
 ```bash
 # home server: solo codice backend/frontend, il compose non è cambiato
 cd /opt/inkless
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml pull
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
+docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml pull
+docker compose --env-file .env.homeserver -f docker/docker-compose.homeserver.yml up -d
 
 # raspberry
 cd /opt/inkless && sudo git pull
@@ -452,7 +458,7 @@ sudo /opt/inkless/hardware/.venv/bin/pip install -r hardware/requirements.txt
 sudo systemctl restart inkless-hardware
 ```
 
-Se invece è cambiato `docker-compose.homeserver.yml`, `docker/nginx.conf` o `.env.example`,
+Se invece è cambiato `docker-compose.homeserver.yml`, `docker/nginx.conf` o `.env.homeserver.example`,
 serve prima un `git pull`: `pull` sull'immagine aggiorna solo il contenitore, non i file che
 lo descrivono.
 
@@ -464,7 +470,7 @@ lo descrivono.
 |---|---|
 | `hardwareOnline: false` con il demone acceso | `HARDWARE_TOKEN` diverso tra le due macchine, oppure `BACKEND_BIND_IP` lasciato a `127.0.0.1` |
 | Il backend non parte, `Missing required environment variable` | in `NODE_ENV=production` mancano `ADMIN_USER`, `ADMIN_PASSWORD` o `HARDWARE_TOKEN`. È voluto |
-| Compose pubblica sulla porta sbagliata | manca `--env-file .env` |
+| Compose pubblica sulla porta sbagliata | manca `--env-file .env.homeserver` |
 | `usb.core.NoBackendError` o accesso negato | regola udev assente, oppure l'utente non è in `plugdev`. Serve un logout o un `udevadm trigger` |
 | La stampante sparisce dopo averla staccata | è esattamente ciò che la regola udev previene: verifica che vendor e product id siano quelli giusti |
 | Nessun messaggio si auto-approva | `MODERATION_LLM_PROVIDER=none`, oppure il runtime LLM non risponde a `MODERATION_LLM_BASE_URL` |

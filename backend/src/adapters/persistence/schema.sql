@@ -46,6 +46,23 @@ CREATE TABLE IF NOT EXISTS print_jobs (
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs (status, created_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_message ON print_jobs (message_id);
 
+-- 20260831 ++ RG #rate_limit_survives_a_restart
+-- Rate-limit counters. In the database rather than in process memory, so a deploy or a
+-- crash does not hand every caller a fresh budget. CREATE TABLE IF NOT EXISTS runs on
+-- every open, so an existing install picks this up with no migration.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  namespace   TEXT NOT NULL,
+  key         TEXT NOT NULL,
+  count       INTEGER NOT NULL,
+  -- Epoch milliseconds. Integer rather than ISO text: this is compared on every single
+  -- request, and it is arithmetic, never something a human reads.
+  started_at  INTEGER NOT NULL,
+
+  PRIMARY KEY (namespace, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_started ON rate_limits (started_at);
+
 -- Monotonic counters. Kept in a table rather than derived from MAX(author_sequence)
 -- so two concurrent submissions can never be handed the same Doe#NNN.
 CREATE TABLE IF NOT EXISTS counters (

@@ -2,7 +2,20 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { formatAttribution } from '../../domain/identity.js';
+import { socketAddress } from '../clientAddress.js';
 import { openEventStream } from '../sse.js';
+
+/**
+ * IPv4 written the way a dual-stack listener reports it. The daemon connects over
+ * IPv4, Node hands it back as "::ffff:192.168.1.254", and an allowlist comparing
+ * strings would never match what the operator put in the .env.
+ *
+ * @param {string} address
+ * @returns {string}
+ */
+function normalizeAddress(address) {
+  return address.startsWith('::ffff:') ? address.slice(7) : address;
+}
 
 /**
  * @param {string} a
@@ -25,7 +38,24 @@ function constantTimeEquals(a, b) {
 export async function hardwareRoutes(fastify, options) {
   const { config, printQueue, trackPrintJob, jobEvents, messages, jobs } = options;
 
+  /** @type {string[]} */
+  const allowedIps = config.hardwareAllowedIps ?? [];
+
   fastify.addHook('onRequest', async (request, reply) => {
+    // 20260831 ++ RG #hardware_channel_is_not_for_everyone
+    // Checked before the token, and against the socket rather than request.ip. Nothing
+    // proxies this route — the daemon dials the backend directly over the LAN — so a
+    // forwarding header here carries no authority at all, and honouring one would let
+    // the caller nominate the address they are authorised as. That is the same mistake
+    // that made every rate limit forgeable; it must not come back on an authz check.
+    if (allowedIps.length > 0) {
+      const caller = normalizeAddress(socketAddress(request));
+      if (!allowedIps.includes(caller)) {
+        request.log.warn({ caller }, 'hardware channel refused an address off the allowlist');
+        return reply.status(403).send({ error: 'FORBIDDEN', message: 'Not a known hardware node' });
+      }
+    }
+
     const header = request.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!constantTimeEquals(token, config.hardwareToken)) {
