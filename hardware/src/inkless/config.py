@@ -41,7 +41,7 @@ def load_settings() -> Settings:
     situation until the printer and the webcam are actually bought.
     """
     return Settings(
-        backend_url=os.environ.get("BACKEND_URL", "http://192.168.1.248:3000"),
+        backend_url=os.environ.get("BACKEND_URL", "http://127.0.0.1:3000"),
         hardware_token=os.environ.get("HARDWARE_TOKEN", "inkless-dev-hardware"),
         printer_kind=os.environ.get("PRINTER_KIND", "fake"),
         printer_vendor_id=_int("PRINTER_USB_VENDOR_ID", 0),

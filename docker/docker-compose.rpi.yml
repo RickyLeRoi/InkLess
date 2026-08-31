@@ -1,7 +1,12 @@
 # docker/docker-compose.rpi.yml
 #
-# Runs on the Raspberry Pi 4 (192.168.1.254). This node is never reachable from the
-# internet: it dials the backend on the LAN and pushes RTMP outbound, nothing else.
+# Runs on the hardware node. This node is never reachable from the internet: it dials
+# the backend on the LAN and pushes the stream outbound, nothing else.
+#
+# Every value comes from the untracked .env. Compose interpolates ${...} at parse time
+# from the file given by --env-file, so run this from the repository root:
+#
+#   docker compose --env-file .env -f docker/docker-compose.rpi.yml up -d
 
 services:
   daemon:
@@ -9,16 +14,13 @@ services:
       context: ..
       dockerfile: docker/hardware.Dockerfile
     restart: unless-stopped
+    # BACKEND_URL, PRINTER_KIND, RECORDER_KIND, UPLOADER_KIND and the storage keys are
+    # injected from here, not restated below.
     env_file: ../.env
-    environment:
-      BACKEND_URL: http://192.168.1.248:3000
-      PRINTER_KIND: escpos
-      RECORDER_KIND: ffmpeg
-      UPLOADER_KIND: s3
     devices:
-      # Exactly the two devices needed. Never `privileged: true`.
-      - "/dev/usb/lp0:/dev/usb/lp0"
-      - "/dev/video0:/dev/video0"
+      # Exactly the two devices needed, named by .env. Never `privileged: true`.
+      - "${PRINTER_DEVICE:-/dev/usb/lp0}:${PRINTER_DEVICE:-/dev/usb/lp0}"
+      - "${WEBCAM_DEVICE:-/dev/video0}:${WEBCAM_DEVICE:-/dev/video0}"
     volumes:
       - clips:/tmp/inkless-clips
       - overlay:/shared
@@ -28,18 +30,21 @@ services:
   streamer:
     image: linuxserver/ffmpeg:latest
     restart: unless-stopped
+    # Opt-in: an empty STREAM_INGEST_URL would leave ffmpeg with a truncated command, so
+    # the service starts only on `--profile stream`, never by accident.
+    profiles: ["stream"]
     env_file: ../.env
     devices:
-      - "/dev/video0:/dev/video0"
+      - "${WEBCAM_DEVICE:-/dev/video0}:${WEBCAM_DEVICE:-/dev/video0}"
     volumes:
       - overlay:/shared:ro
     # drawtext with reload=1 re-reads the overlay file every frame, so the handle the
     # daemon just wrote appears over the live shot without restarting the encoder.
     command: >
-      -f v4l2 -framerate 25 -video_size 1280x720 -i /dev/video0
+      -f v4l2 -framerate 25 -video_size 1280x720 -i ${WEBCAM_DEVICE:-/dev/video0}
       -vf "drawtext=textfile=/shared/current_user.txt:reload=1:fontcolor=white:fontsize=28:x=24:y=h-48"
       -c:v h264_v4l2m2m -b:v 2500k -maxrate 2500k -bufsize 5000k
-      -f flv rtmp://live.twitch.tv/app/${TWITCH_STREAM_KEY}
+      -f flv ${STREAM_INGEST_URL}
     depends_on:
       - daemon
     security_opt:

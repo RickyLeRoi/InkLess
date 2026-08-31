@@ -1,7 +1,12 @@
 # docker/docker-compose.homeserver.yml
 #
-# Runs on the Dell OptiPlex VM (192.168.1.248). Nothing here publishes a port to the
-# internet: cloudflared dials out, and the only inbound path is the tunnel.
+# Runs on the home server. Nothing here publishes a port to the internet: cloudflared
+# dials out, and the only inbound path is the tunnel.
+#
+# Every value comes from the untracked .env. Compose interpolates ${...} at parse time
+# from the file given by --env-file, so run this from the repository root:
+#
+#   docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
 
 services:
   backend:
@@ -9,20 +14,18 @@ services:
       context: ..
       dockerfile: docker/backend.Dockerfile
     restart: unless-stopped
+    # NODE_ENV, HOST, PORT and every secret are injected from here, not restated below.
     env_file: ../.env
-    environment:
-      NODE_ENV: production
-      HOST: 0.0.0.0
-      PORT: 3000
     volumes:
       - inkless-data:/app/data
     networks:
       - backend_net
-      # Reachable from the RPi over the LAN, but only on this segment.
+      # Reachable from the hardware node over the LAN, but only on this segment.
       - hw_net
     ports:
-      # Bound to the LAN address on purpose: the RPi needs it, the internet does not.
-      - "192.168.1.248:3000:3000"
+      # Bound to one interface on purpose: the hardware node needs it, the internet does
+      # not. The default keeps the port on the host until .env says otherwise.
+      - "${BACKEND_BIND_IP:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     security_opt:
       - no-new-privileges:true
     read_only: true

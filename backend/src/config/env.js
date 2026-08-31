@@ -63,7 +63,7 @@ export function loadConfig() {
       llmModel: process.env.MODERATION_LLM_MODEL ?? 'llama3.2:3b',
       // Ollama's native API lives at the host root; anything OpenAI-compatible wants
       // the /v1 prefix included here.
-      llmBaseUrl: process.env.MODERATION_LLM_BASE_URL ?? 'http://192.168.1.254:11434',
+      llmBaseUrl: process.env.MODERATION_LLM_BASE_URL ?? 'http://127.0.0.1:11434',
       llmApiKey: process.env.MODERATION_LLM_API_KEY ?? ''
     },
 
