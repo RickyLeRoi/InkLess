@@ -5,4 +5,4 @@
 # These are only needed once the real hardware and bucket exist.
 
 python-escpos==3.1        # PRINTER_KIND=escpos
-boto3==1.35.99            # UPLOADER_KIND=s3
+boto3==1.43.83            # UPLOADER_KIND=s3
