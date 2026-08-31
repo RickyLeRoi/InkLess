@@ -1,0 +1,8 @@
+# hardware/requirements.txt
+#
+# The daemon's core runs on the standard library alone: with PRINTER_KIND=fake,
+# RECORDER_KIND=fake and UPLOADER_KIND=local there is nothing to install.
+# These are only needed once the real hardware and bucket exist.
+
+python-escpos==3.1        # PRINTER_KIND=escpos
+boto3==1.35.99            # UPLOADER_KIND=s3

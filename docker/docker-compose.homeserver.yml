@@ -1,0 +1,53 @@
+# docker/docker-compose.homeserver.yml
+#
+# Runs on the Dell OptiPlex VM (192.168.1.248). Nothing here publishes a port to the
+# internet: cloudflared dials out, and the only inbound path is the tunnel.
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+    volumes:
+      - inkless-data:/app/data
+    networks:
+      - backend_net
+      # Reachable from the RPi over the LAN, but only on this segment.
+      - hw_net
+    ports:
+      # Bound to the LAN address on purpose: the RPi needs it, the internet does not.
+      - "192.168.1.248:3000:3000"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - backend_net
+    depends_on:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  backend_net:
+    driver: bridge
+    internal: false
+  hw_net:
+    driver: bridge
+
+volumes:
+  inkless-data:

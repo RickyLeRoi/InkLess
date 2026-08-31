@@ -1,0 +1,359 @@
+/* frontend/src/styles.css */
+
+:root {
+  --paper: #f4f2ed;
+  --ink: #16150f;
+  --ink-soft: #5c584c;
+  --rule: #cfcabb;
+  --accent: #1b1a14;
+  --danger: #8a2b1f;
+  --ok: #2f6b3a;
+  --receipt-width: 22rem;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #e6e2d8;
+  color: var(--ink);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+}
+
+.shell {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 2px dashed var(--rule);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.masthead h1 {
+  font-size: 1.6rem;
+  letter-spacing: 0.18em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.masthead nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.masthead nav a {
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  padding-bottom: 2px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+}
+
+.masthead nav a[aria-current='page'] {
+  border-bottom-color: var(--ink);
+}
+
+.intro {
+  max-width: 42rem;
+  margin-bottom: 2rem;
+  color: var(--ink-soft);
+}
+
+/* The receipt: torn top and bottom edges cut out of a plain block of paper. */
+.receipt {
+  position: relative;
+  width: 100%;
+  max-width: var(--receipt-width);
+  background: var(--paper);
+  padding: 1.25rem 1.1rem 1.5rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  --tear: 8px;
+  --tear-mask:
+    linear-gradient(135deg, transparent 50%, #000 0) 0 0 / var(--tear) var(--tear) repeat-x,
+    linear-gradient(-135deg, transparent 50%, #000 0) 0 100% / var(--tear) var(--tear) repeat-x,
+    linear-gradient(#000 0 0) 0 var(--tear) / 100% calc(100% - var(--tear) * 2) no-repeat;
+  -webkit-mask: var(--tear-mask);
+  mask: var(--tear-mask);
+}
+
+.receipt__head,
+.receipt__foot {
+  text-align: center;
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.receipt__rule {
+  border: 0;
+  border-top: 1px dashed var(--rule);
+  margin: 0.9rem 0;
+}
+
+.receipt__body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.receipt__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.receipt__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 1.75rem;
+  align-items: start;
+}
+
+.searchbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.75rem;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type='text'],
+input[type='search'],
+input[type='password'],
+textarea,
+select {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 0.6rem 0.7rem;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+button {
+  background: var(--accent);
+  color: var(--paper);
+  border: 1px solid var(--accent);
+  padding: 0.55rem 0.95rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+}
+
+button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--ink);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--rule);
+}
+
+button.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--paper);
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.4rem 0;
+}
+
+.reason-pill {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: 1px solid var(--rule);
+  padding: 0.1rem 0.4rem;
+}
+
+.reason-pill[data-kind='handle'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.field {
+  margin-bottom: 1rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-bottom: 0.35rem;
+  color: var(--ink-soft);
+}
+
+.counter {
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.counter[data-over='true'] {
+  color: var(--danger);
+  font-weight: bold;
+}
+
+.notice {
+  border-left: 3px solid var(--rule);
+  padding: 0.6rem 0.9rem;
+  margin: 1rem 0;
+  background: var(--paper);
+  font-size: 0.85rem;
+}
+
+.notice[data-tone='error'] {
+  border-left-color: var(--danger);
+}
+
+.notice[data-tone='ok'] {
+  border-left-color: var(--ok);
+}
+
+.status-pill {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border: 1px solid var(--rule);
+  padding: 0.1rem 0.45rem;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--receipt-width));
+  gap: 2.5rem;
+  align-items: start;
+}
+
+@media (max-width: 46rem) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 19, 14, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 10;
+}
+
+.dialog__panel {
+  background: var(--paper);
+  padding: 1.5rem;
+  width: min(100%, 26rem);
+  border: 1px solid var(--rule);
+}
+
+.tier {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--rule);
+  padding: 0.7rem;
+  margin-bottom: 0.6rem;
+  cursor: pointer;
+  background: transparent;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.85rem;
+  color: var(--ink);
+  width: 100%;
+}
+
+.tier[aria-pressed='true'] {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.tier strong {
+  display: block;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.admin-row {
+  border-bottom: 1px dashed var(--rule);
+  padding: 1rem 0;
+}
+
+.admin-row__reasons {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--danger);
+}
+
+.skeleton {
+  height: 12rem;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--paper),
+    var(--paper) 10px,
+    #eae7de 10px,
+    #eae7de 20px
+  );
+}
