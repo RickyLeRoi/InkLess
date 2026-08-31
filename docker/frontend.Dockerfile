@@ -3,7 +3,7 @@
 # Two stages on purpose: Node exists only to run Vite. What ships is a static bundle
 # behind nginx, so no JavaScript runtime is left in the production image.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
