@@ -27,6 +27,10 @@ Docker sul Pi aggiungerebbe solo attrito dove fa più male: i device USB vengono
 all'avvio del container, quindi una stampante staccata e riattaccata richiede un restart,
 mentre con una regola udev il demone la ritrova da solo.
 
+`docker/docker-compose.rpi.yml` e la sua immagine su GHCR esistono comunque — pubblicati
+per poterla testare altrove (server, laptop) senza il Pi. Non è la via consigliata per il
+nodo vero, e usarla lì significa accettare il compromesso del paragrafo sopra.
+
 **Non devi sostituire Raspbian.** Raspberry Pi OS è il sistema giusto. Verifica solo che sia
 a 64 bit:
 
@@ -136,6 +140,27 @@ docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d --b
 > **Il flag `--env-file` non è opzionale.** Compose risolve i `${...}` del file compose
 > leggendo quello, e di default cercherebbe un `.env` dentro `docker/` che non esiste. Senza,
 > la porta finisce su `127.0.0.1` e il Pi non si collegherà mai.
+
+### Immagini precompilate (GHCR)
+
+`--build` compila sul server, che è il modo più lento e più affamato di RAM di farlo. Ogni
+push su `main` che tocca `backend/` o `frontend/` fa scattare un workflow GitHub Actions
+(`.github/workflows/docker-*.yml`) che pubblica l'immagine su GHCR — nessun secret da
+configurare, usa il token che GitHub genera da solo per la Action.
+
+Il repository è privato, quindi lo è anche il pacchetto: il server deve autenticarsi una
+volta sola prima di poter scaricare.
+
+```bash
+# una tantum: token classico con scope read:packages, da github.com/settings/tokens
+echo <token> | docker login ghcr.io -u <utente-github> --password-stdin
+
+docker compose --env-file .env -f docker/docker-compose.homeserver.yml pull
+docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
+```
+
+`--build` resta lì per un motivo solo: testare una modifica che non hai ancora pushato.
+Appena è su `main`, la build gira su GitHub e da qui in poi basta `pull`.
 
 Verifica:
 
@@ -367,6 +392,10 @@ raggiunge il backend per un'altra strada.
 
 ### Provare la build da una macchina senza Docker
 
+`docker/frontend.Dockerfile` lancia `nginx -t` in fase di build, quindi il workflow
+`docker-frontend.yml` già rifiuta un push che rompe la sintassi di `nginx.conf` — questa
+procedura serve solo per un controllo *prima* di pushare, non è più l'unica rete di sicurezza.
+
 Capita di sviluppare su una macchina dove il daemon Docker non gira, perché i container
 vivono solo sul server. Non serve clonare il repo là: il client Docker parla con un daemon
 remoto via SSH e gli spedisce il contesto di build.
@@ -384,9 +413,9 @@ docker --context inkless-hs build -f docker/frontend.Dockerfile -t inkless-front
 docker --context inkless-hs run --rm --entrypoint nginx inkless-frontend:check -t
 ```
 
-L'ultimo comando deve rispondere `syntax is ok` / `test is successful`, ed è **l'unica** prova
-che `docker/nginx.conf` regge: `docker compose config` non lo apre nemmeno, perché valida solo
-il file compose ed è interamente client-side.
+L'ultimo comando deve rispondere `syntax is ok` / `test is successful`. `docker compose config`
+non basta da solo: valida il file compose, non apre mai `nginx.conf`, perché è interamente
+client-side.
 
 Poi si pulisce:
 
@@ -412,15 +441,20 @@ Lo stesso context serve per qualsiasi altro comando: basta anteporre `--context 
 ## 7. Aggiornamenti
 
 ```bash
-# home server
-cd /opt/inkless && git pull
-docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d --build
+# home server: solo codice backend/frontend, il compose non è cambiato
+cd /opt/inkless
+docker compose --env-file .env -f docker/docker-compose.homeserver.yml pull
+docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
 
 # raspberry
 cd /opt/inkless && sudo git pull
 sudo /opt/inkless/hardware/.venv/bin/pip install -r hardware/requirements.txt
 sudo systemctl restart inkless-hardware
 ```
+
+Se invece è cambiato `docker-compose.homeserver.yml`, `docker/nginx.conf` o `.env.example`,
+serve prima un `git pull`: `pull` sull'immagine aggiorna solo il contenitore, non i file che
+lo descrivono.
 
 ---
 

@@ -1,0 +1,63 @@
+# .github/workflows/docker-hardware.yml
+#
+# Builds and publishes the hardware-daemon image to GHCR, so it can be
+# pulled with `docker compose pull` on either machine that might run it.
+#
+# Two platforms on purpose: amd64 to test the container on the home server
+# or a dev machine, arm64 for the actual target, a Raspberry Pi 4 on a
+# 64-bit OS. QEMU emulates arm64 on the (amd64) GitHub runner.
+
+name: docker-hardware
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "hardware/**"
+      - "docker/hardware.Dockerfile"
+      - ".github/workflows/docker-hardware.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/rickyleroi/inkless-hardware
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/hardware.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

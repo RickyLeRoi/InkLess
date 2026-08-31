@@ -10,6 +10,7 @@
 
 services:
   daemon:
+    image: ghcr.io/rickyleroi/inkless-hardware:latest
     build:
       context: ..
       dockerfile: docker/hardware.Dockerfile
@@ -18,9 +19,19 @@ services:
     # injected from here, not restated below.
     env_file: ../.env
     devices:
-      # Exactly the two devices needed, named by .env. Never `privileged: true`.
-      - "${PRINTER_DEVICE:-/dev/usb/lp0}:${PRINTER_DEVICE:-/dev/usb/lp0}"
+      # python-escpos opens the printer via libusb (pyusb), which scans the
+      # whole USB tree for the vendor/product match — not a fixed node like
+      # /dev/usb/lp0, which belongs to a different kernel driver entirely.
+      - "/dev/bus/usb:/dev/bus/usb"
       - "${WEBCAM_DEVICE:-/dev/video0}:${WEBCAM_DEVICE:-/dev/video0}"
+    # The udev rule in INSTALL.md grants the printer's device node to the
+    # host's plugdev group, and /dev/video0 is normally owned by the host's
+    # video group. Neither name means anything inside the container, but
+    # the numeric GID does — so both host GIDs join the container process.
+    # Unverified against real hardware; see INSTALL.md for how to find them.
+    group_add:
+      - "${PRINTER_GROUP_GID}"
+      - "${WEBCAM_GROUP_GID}"
     volumes:
       - clips:/tmp/inkless-clips
       - overlay:/shared
