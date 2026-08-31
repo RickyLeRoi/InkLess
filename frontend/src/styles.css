@@ -131,6 +131,73 @@ a {
   margin-top: 0.9rem;
 }
 
+.receipt__qr {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.9rem;
+}
+
+.receipt__qr span {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+.qr {
+  display: block;
+  flex: none;
+}
+
+.receipt__hint {
+  margin: 0.7rem 0 0;
+}
+
+/* Native overflow scrolling with snap points — the arrows in Carousel.jsx only nudge it. */
+.carousel {
+  margin-bottom: 3rem;
+}
+
+.carousel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.carousel__head h2 {
+  margin: 0 0 1rem;
+}
+
+.carousel__nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.carousel__nav button {
+  padding: 0.3rem 0.75rem;
+}
+
+.carousel__track {
+  display: flex;
+  gap: 1.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  padding: 0.5rem 0 1.25rem;
+}
+
+.carousel__slide {
+  flex: 0 0 var(--receipt-width);
+  max-width: 100%;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 46rem) {
+  .carousel__slide {
+    flex-basis: min(var(--receipt-width), 82vw);
+  }
+}
+
 .board {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));

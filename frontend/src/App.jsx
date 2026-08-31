@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Board } from './components/Board.jsx';
+import { Carousel } from './components/Carousel.jsx';
 import { MyMessages } from './components/MyMessages.jsx';
 import { PrintDialog } from './components/PrintDialog.jsx';
 import { SubmitForm } from './components/SubmitForm.jsx';
@@ -35,21 +36,20 @@ export function App() {
       </header>
 
       {path === '' ? (
-        <div className="columns">
-          <div>
-            <p className="intro">
-              Scrivi un messaggio, massimo 200 caratteri. Se passa la moderazione finisce sulla
-              bacheca digitale. Da lì chiunque, con una piccola donazione, può farlo uscire davvero
-              da una stampante termica a casa mia — e con un euro si porta a casa pure il video.
-            </p>
+        <>
+          <p className="intro">
+            Scrivi un messaggio, massimo 200 caratteri. Se passa la moderazione finisce sulla
+            bacheca digitale. Da lì chiunque, con una piccola donazione, può farlo uscire davvero
+            da una stampante termica a casa mia — e con un euro si porta a casa pure il video.
+          </p>
+
+          <Carousel onPrint={setPrinting} reloadToken={reloadToken} />
+
+          <div className="columns">
             <SubmitForm onSubmitted={refresh} />
             <MyMessages reloadToken={reloadToken} />
           </div>
-          <div>
-            <h2>Ultimi in bacheca</h2>
-            <Board onPrint={setPrinting} reloadToken={reloadToken} />
-          </div>
-        </div>
+        </>
       ) : null}
 
       {path === 'bacheca' ? <Board onPrint={setPrinting} reloadToken={reloadToken} /> : null}
