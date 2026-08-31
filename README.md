@@ -92,6 +92,7 @@ a hardware spento, dal messaggio alla carta. Gli adapter reali si attivano da co
 ```bash
 cd backend   && npm test && npm run typecheck
 cd hardware  && python3 -m unittest discover -s tests
+cd e2e       && npm test    # avvia backend e demone davvero, e segue il flusso fino alla carta
 ```
 
 ### Configurazione

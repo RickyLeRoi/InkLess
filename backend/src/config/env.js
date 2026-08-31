@@ -73,9 +73,14 @@ export function loadConfig() {
     },
 
     payments: {
+      // stripe | paypal | fake
       provider: process.env.PAYMENT_PROVIDER ?? 'fake',
       stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
-      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? ''
+      stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+      paypalClientId: process.env.PAYPAL_CLIENT_ID ?? '',
+      paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET ?? '',
+      paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID ?? '',
+      paypalEnvironment: process.env.PAYPAL_ENVIRONMENT ?? 'live'
     }
   };
 }

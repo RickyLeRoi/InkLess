@@ -6,6 +6,7 @@ import { OllamaModerationAdapter } from './adapters/moderation/OllamaModerationA
 import { OpenAiModerationAdapter } from './adapters/moderation/OpenAiModerationAdapter.js';
 import { RegexModerationAdapter } from './adapters/moderation/RegexModerationAdapter.js';
 import { FakePaymentAdapter } from './adapters/payment/FakePaymentAdapter.js';
+import { PayPalPaymentAdapter } from './adapters/payment/PayPalPaymentAdapter.js';
 import { StripePaymentAdapter } from './adapters/payment/StripePaymentAdapter.js';
 import { createDatabase } from './adapters/persistence/database.js';
 import { SqliteMessageRepository } from './adapters/persistence/SqliteMessageRepository.js';
@@ -78,6 +79,15 @@ function createPaymentAdapter(config) {
     return new StripePaymentAdapter({
       secretKey: config.payments.stripeSecretKey,
       webhookSecret: config.payments.stripeWebhookSecret
+    });
+  }
+
+  if (config.payments.provider === 'paypal') {
+    return new PayPalPaymentAdapter({
+      clientId: config.payments.paypalClientId,
+      clientSecret: config.payments.paypalClientSecret,
+      webhookId: config.payments.paypalWebhookId,
+      environment: config.payments.paypalEnvironment
     });
   }
 

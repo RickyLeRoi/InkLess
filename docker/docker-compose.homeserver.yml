@@ -3,13 +3,18 @@
 # Runs on the home server. Nothing here publishes a port to the internet: cloudflared
 # dials out, and the only inbound path is the tunnel.
 #
+# The tunnel's public hostname must point at http://inkless-frontend:80 — nginx serves the built
+# site and forwards /api to the backend, so the browser only ever sees one origin.
+#
 # Every value comes from the untracked .env. Compose interpolates ${...} at parse time
 # from the file given by --env-file, so run this from the repository root:
 #
 #   docker compose --env-file .env -f docker/docker-compose.homeserver.yml up -d
 
 services:
-  backend:
+  # Service names carry the project prefix on purpose: this file is not always the
+  # only compose file on the host, and `backend` is the first name anyone else takes.
+  inkless-backend:
     build:
       context: ..
       dockerfile: docker/backend.Dockerfile
@@ -32,6 +37,28 @@ services:
     tmpfs:
       - /tmp
 
+  # 20260831 ++ RG #frontend_deploy
+  inkless-frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    networks:
+      # Faces the tunnel on one side and the backend on the other. It is the only
+      # container that sits on both.
+      - frontend_net
+      - backend_net
+    depends_on:
+      - inkless-backend
+    # No `ports`: nothing on the host reaches this, only cloudflared from frontend_net.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -39,15 +66,23 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
-      - backend_net
+      # Only the frontend. The tunnel has no route to the backend any more, and that is
+      # the point: public traffic cannot skip nginx.
+      - frontend_net
     depends_on:
-      - backend
+      - inkless-frontend
     security_opt:
       - no-new-privileges:true
 
 networks:
+  frontend_net:
+    driver: bridge
   backend_net:
     driver: bridge
+    # 20260831 RG
+    # Deliberately not `internal: true`, tempting as it looks: the backend calls the
+    # payment provider and the moderation LLM host from here. What isolates it is that no port is
+    # published on this network and nginx is the only other member.
     internal: false
   hw_net:
     driver: bridge

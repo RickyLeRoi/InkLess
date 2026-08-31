@@ -15,7 +15,7 @@ Guida operativa per mettere InkLess in produzione: **home server** (backend in D
 | Home server | Docker Engine + plugin Compose, `git` |
 | Raspberry Pi | Raspberry Pi OS **64-bit** (Lite basta e avanza), `git` |
 | Cloudflare | il dominio delegato, e accesso a Zero Trust per creare il tunnel |
-| Stripe | chiave segreta e secret del webhook |
+| Stripe **o** PayPal | Stripe: chiave segreta e secret del webhook. PayPal: client id, client secret e webhook id |
 | Storage clip | un bucket S3-compatibile (facoltativo: senza, le clip restano locali) |
 
 ### Sul Raspberry non serve Docker
@@ -65,7 +65,11 @@ Parti da [.env.example](.env.example) e compila **tutto**. In particolare:
 | `ADMIN_USER` / `ADMIN_PASSWORD` | credenziali della dashboard di moderazione |
 | `HARDWARE_TOKEN` | il segreto generato sopra |
 | `CLOUDFLARE_TUNNEL_TOKEN` | dal passo 2 |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | dalla dashboard Stripe |
+| `PAYMENT_PROVIDER` | `stripe` o `paypal`. In produzione `fake` viene rifiutato |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | dalla dashboard Stripe, solo con `PAYMENT_PROVIDER=stripe` |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | dall'app REST sul developer dashboard, solo con `PAYMENT_PROVIDER=paypal` |
+| `PAYPAL_WEBHOOK_ID` | l'id che PayPal assegna all'endpoint quando lo registri. Entra nella firma: se è sbagliato **ogni** notifica fallisce la verifica, e sembrerà che nessuno paghi |
+| `PAYPAL_ENVIRONMENT` | `live` o `sandbox` |
 | `MODERATION_LLM_*` | `MODERATION_LLM_PROVIDER=none` se non vuoi l'LLM: la coda resta tutta manuale |
 
 ### `.env` sul Raspberry
@@ -108,8 +112,9 @@ Nel pannello **Zero Trust → Networks → Tunnels**:
    Il token **è** una credenziale: non finisce in git e non si incolla in chat.
 3. Nella scheda *Public Hostnames* aggiungi:
    - **Hostname:** `<dominio>`
-   - **Service:** `http://backend:3000` — è il nome del servizio Compose, risolto dentro la
-     rete Docker. Non un IP.
+   - **Service:** `http://inkless-frontend:80` — è il nome del servizio Compose, risolto dentro la
+     rete Docker. Non un IP, e **non** il backend: nginx serve il sito e inoltra `/api`,
+     così il browser vede una sola origine.
 
 Il tunnel si apre dall'interno: **nessuna porta va aperta sul router**, ed è il punto di tutta
 la topologia. Se ti ritrovi a fare port forwarding, hai sbagliato strada.
@@ -137,7 +142,7 @@ Verifica:
 ```bash
 curl -s http://<home-server-ip>:3000/health
 # {"status":"ok","hardwareOnline":false}   ← false è corretto: il Pi non c'è ancora
-docker compose -f docker/docker-compose.homeserver.yml logs -f backend
+docker compose -f docker/docker-compose.homeserver.yml logs -f inkless-backend
 ```
 
 Lo schema del database si applica da solo alla prima apertura, migrazioni comprese. Non c'è
@@ -149,6 +154,61 @@ Il volume `inkless-data` contiene il database: **è l'unica cosa da salvare**.
 docker run --rm -v inkless-data:/data -v "$PWD:/backup" alpine \
   tar czf /backup/inkless-$(date +%F).tar.gz -C /data .
 ```
+
+### Se sul server c'è già uno stack Compose
+
+Il file del repo presume di essere solo sulla macchina. Se il server ne ospita già uno con
+altri servizi, ci sono due strade.
+
+**Tenerli separati.** Non tocchi nulla: restano due progetti Compose distinti.
+
+```bash
+docker compose -p inkless --env-file .env -f docker/docker-compose.homeserver.yml up -d --build
+```
+
+Costa un secondo `cloudflared`, e quindi **un secondo tunnel con un token suo**. Riusare lo
+stesso token su due connettori non è una scorciatoia: Cloudflare bilancia tra i due, e metà
+delle richieste finisce su quello che il servizio non ce l'ha.
+
+**Fondere i servizi nello stack esistente.** Riusi il `cloudflared` che c'è già. Copi
+`inkless-backend` e `inkless-frontend` dentro il `services:` dell'altro file, con due
+aggiustamenti: `build.context` diventa il percorso assoluto del repo sul server, e
+`env_file` punta al `.env` del repo — non a quello dello stack ospite, che resta riservato
+alle interpolazioni `${...}`. In fondo aggiungi le reti:
+
+```yaml
+networks:
+  frontend_net:
+  backend_net:
+  hw_net:
+```
+
+Infine `cloudflared` deve poter raggiungere nginx:
+
+```yaml
+    networks:
+      - default
+      - frontend_net
+```
+
+Prima di lanciare, i tre controlli che corrispondono ai tre modi in cui questa fusione si
+rompe:
+
+1. **La rete `default`.** È la trappola vera. Nel momento in cui un servizio dichiara un
+   blocco `networks:`, esce dalla rete di default: se nella riga qui sopra ometti `default`,
+   `cloudflared` smette di vedere *tutti* gli altri servizi dello stack, non solo InkLess.
+2. **Porte host.** `inkless-backend` pubblica la `3000`. Se è già presa, cambia la parte
+   sinistra della mappatura (`3010:3000`) e allinea `BACKEND_URL` sul Raspberry, che deve
+   puntare alla porta nuova.
+3. **Servizi duplicati.** Un secondo `cloudflared` nello stesso file è una chiave YAML
+   ripetuta: Compose tiene l'ultima e l'altra sparisce in silenzio. I nomi `inkless-*` sono
+   scelti per non collidere, ma il `cloudflared` del file del repo va lasciato fuori.
+
+Se il servizio dei dati diventa un bind mount invece del volume `inkless-data`, la cartella
+va creata prima e assegnata all'utente che gira nel container: `chown 1000:1000`. Il backend
+non gira come root e il filesystem è read-only tranne quel percorso.
+
+In entrambi gli scenari, **non lanciare i due stack insieme**: userebbero lo stesso database.
 
 ---
 
@@ -267,25 +327,75 @@ Da un'altra shell, `curl http://<home-server-ip>:3000/health` deve rispondere
 
 ---
 
-## 5. Frontend — ancora da decidere
+## 5. Frontend
 
-**Questo è l'unico pezzo non ancora cablato**, ed è bene saperlo prima di andare live: il
-backend serve solo l'API, non i file statici.
+Nessun passo a parte: il servizio `inkless-frontend` vive nello stesso compose del backend e viene
+costruito dal `up -d --build` del passo 3. L'immagine è a due stadi — Node compila con Vite,
+poi in produzione resta solo `dist/` dentro nginx, senza runtime JavaScript.
 
-```bash
-cd frontend && npm ci && npm run build   # produce dist/
+Chi raggiunge cosa:
+
+```
+internet → cloudflared ─[frontend_net]─ nginx ─[backend_net]─ backend ─[hw_net]─ RPi
 ```
 
-Due strade:
+`nginx` è l'unico container su due reti, e l'unico che il tunnel vede. Verso l'esterno esiste
+una sola origine: il sito e `/api` arrivano dalla stessa porta. La pubblicazione
+`${BACKEND_BIND_IP}:3000` sull'host resta, ma serve al Pi, non al pubblico.
 
-- **Cloudflare Pages** — pubblichi `dist/`, poi instradi `<dominio>/api/*` verso il tunnel e
-  tutto il resto verso Pages. Zero container in più, ma la regola di routing va scritta su
-  Cloudflare.
-- **Container nginx** — serve `dist/` e inoltra `/api` al backend; il tunnel punta a lui invece
-  che al backend. Tutto resta dentro il compose e sotto una sola origine, al prezzo di un
-  servizio in più da scrivere.
+Verifica dopo il deploy:
 
-In entrambi i casi `CORS_ORIGIN` deve elencare l'origine da cui il browser carica il sito.
+```bash
+docker compose -f docker/docker-compose.homeserver.yml logs -f inkless-frontend
+docker compose -f docker/docker-compose.homeserver.yml exec inkless-frontend wget -qO- http://inkless-backend:3000/health
+```
+
+Il secondo comando è quello che conta: se risponde, la catena nginx → backend regge, e un 502
+sul sito ha un'altra causa.
+
+### Sviluppo in locale
+
+Invariato, e non passa da Docker:
+
+```bash
+cd frontend && npm install && npm run dev   # :5173, con il proxy di Vite su :3000
+```
+
+`CORS_ORIGIN` in produzione non serve più al browser, visto che l'origine è una sola.
+Tenerlo valorizzato col dominio pubblico resta la difesa buona il giorno in cui qualcuno
+raggiunge il backend per un'altra strada.
+
+### Provare la build da una macchina senza Docker
+
+Capita di sviluppare su una macchina dove il daemon Docker non gira, perché i container
+vivono solo sul server. Non serve clonare il repo là: il client Docker parla con un daemon
+remoto via SSH e gli spedisce il contesto di build.
+
+Prerequisiti sul server: chiave SSH già autorizzata, host key già accettata almeno una volta
+(`ssh <utente>@<home-server-ip>` a mano), utente nel gruppo `docker`.
+
+```bash
+docker context create inkless-hs --docker "host=ssh://<utente>@<home-server-ip>"
+
+# la build gira sul server, il contesto parte da qui
+docker --context inkless-hs build -f docker/frontend.Dockerfile -t inkless-frontend:check .
+
+# il parser vero di nginx sulla conf che andrà in produzione
+docker --context inkless-hs run --rm --entrypoint nginx inkless-frontend:check -t
+```
+
+L'ultimo comando deve rispondere `syntax is ok` / `test is successful`, ed è **l'unica** prova
+che `docker/nginx.conf` regge: `docker compose config` non lo apre nemmeno, perché valida solo
+il file compose ed è interamente client-side.
+
+Poi si pulisce:
+
+```bash
+docker --context inkless-hs image rm inkless-frontend:check
+docker context rm inkless-hs
+```
+
+Lo stesso context serve per qualsiasi altro comando: basta anteporre `--context inkless-hs`.
 
 ---
 
@@ -293,7 +403,7 @@ In entrambi i casi `CORS_ORIGIN` deve elencare l'origine da cui il browser caric
 
 1. Apri `https://<dominio>` e invia un messaggio.
 2. Vai su `#/admin`, autenticati con `ADMIN_USER` / `ADMIN_PASSWORD`, approva.
-3. Dalla bacheca premi **Stampa questo** e completa il pagamento con una carta di test Stripe.
+3. Dalla bacheca premi **Stampa questo** e completa il pagamento con le credenziali di test del provider configurato (carta di prova su Stripe, buyer di sandbox su PayPal).
 4. Guarda `journalctl -u inkless-hardware -f` sul Pi: il lavoro arriva, la carta esce.
 5. La pagina del lavoro si aggiorna da sola fino a `completato`.
 
@@ -324,11 +434,14 @@ sudo systemctl restart inkless-hardware
 | `usb.core.NoBackendError` o accesso negato | regola udev assente, oppure l'utente non è in `plugdev`. Serve un logout o un `udevadm trigger` |
 | La stampante sparisce dopo averla staccata | è esattamente ciò che la regola udev previene: verifica che vendor e product id siano quelli giusti |
 | Nessun messaggio si auto-approva | `MODERATION_LLM_PROVIDER=none`, oppure il runtime LLM non risponde a `MODERATION_LLM_BASE_URL` |
+| `502 Bad Gateway` sul sito | il backend non è su, o non è sulla stessa `backend_net`. Provalo da dentro nginx con la `exec wget` del passo 5 |
+| La pagina del lavoro resta ferma su "in coda" | qualcosa bufferizza l'SSE. Se hai messo un altro proxy davanti a nginx, gli serve `proxy_buffering off` sulla rotta dello stream |
+| Nessun pagamento risulta mai confermato, su PayPal | `PAYPAL_WEBHOOK_ID` non è quello dell'endpoint registrato. Entra nel payload firmato, quindi sbagliarlo fa fallire la verifica di tutto senza distinzione |
 | Il video non arriva | l'utente ha pagato sotto la soglia della clip, oppure `UPLOADER_KIND=s3` con credenziali vuote |
 
 Log utili:
 
 ```bash
-docker compose -f docker/docker-compose.homeserver.yml logs -f backend   # home server
+docker compose -f docker/docker-compose.homeserver.yml logs -f inkless-backend   # home server
 journalctl -u inkless-hardware -f                                        # raspberry
 ```

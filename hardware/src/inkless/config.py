@@ -11,6 +11,7 @@ class Settings:
     backend_url: str
     hardware_token: str
     printer_kind: str
+    printer_spool_path: str
     printer_vendor_id: int
     printer_product_id: int
     recorder_kind: str
@@ -44,6 +45,7 @@ def load_settings() -> Settings:
         backend_url=os.environ.get("BACKEND_URL", "http://127.0.0.1:3000"),
         hardware_token=os.environ.get("HARDWARE_TOKEN", "inkless-dev-hardware"),
         printer_kind=os.environ.get("PRINTER_KIND", "fake"),
+        printer_spool_path=os.environ.get("PRINTER_SPOOL_PATH", "/tmp/inkless-spool.txt"),
         printer_vendor_id=_int("PRINTER_USB_VENDOR_ID", 0),
         printer_product_id=_int("PRINTER_USB_PRODUCT_ID", 0),
         recorder_kind=os.environ.get("RECORDER_KIND", "fake"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import signal
-import time
+import threading
 import urllib.error
 
 from .backend import HttpBackend
@@ -19,7 +19,7 @@ logger = logging.getLogger("inkless")
 def build_printer(settings: Settings):
     if settings.printer_kind == "escpos":
         return EscPosPrinter(settings.printer_vendor_id, settings.printer_product_id)
-    return FakePrinter()
+    return FakePrinter(settings.printer_spool_path)
 
 
 def build_recorder(settings: Settings):
@@ -58,36 +58,64 @@ def main() -> None:
     )
     worker.start()
 
-    running = True
+    stopping = threading.Event()
+
+    def connection_loop() -> None:
+        while not stopping.is_set():
+            try:
+                # Catch-up first, stream second: anything paid for while this node was
+                # down is in the table but was never pushed to anybody.
+                for ticket in backend.pending_tickets():
+                    worker.submit(ticket)
+
+                for ticket in backend.stream_tickets():
+                    worker.submit(ticket)
+
+                if not stopping.is_set():
+                    logger.warning("stream closed by the backend, reconnecting")
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
+                if stopping.is_set():
+                    return
+                logger.warning("backend unreachable (%s), retrying", error)
+            except Exception:  # noqa: BLE001 - the daemon must outlive any single failure
+                # A socket we closed on the way out surfaces here; that is a shutdown,
+                # not a crash worth a stack trace.
+                if stopping.is_set():
+                    return
+                logger.exception("unexpected failure in the connection loop")
+
+            # Waiting on the event, not sleeping: a signal during the backoff must not
+            # cost a full reconnect window before the process may exit.
+            stopping.wait(settings.reconnect_seconds)
+
+    # 20260831 ** RG #clean_sigterm
+    # The link runs on a daemon thread and the main thread only parks on the event.
+    # Reading the stream means sitting inside a blocking recv, and a signal cannot get
+    # anybody out of one: PEP 475 simply retries the syscall once the handler returns,
+    # closed socket or not. A daemon thread instead dies with the interpreter, so the
+    # shutdown path never has to interrupt a read it cannot interrupt.
+    link = threading.Thread(target=connection_loop, name="backend-link", daemon=True)
 
     def shutdown(*_: object) -> None:
-        nonlocal running
-        running = False
-        worker.stop()
+        # 20260831 ** RG #no_close_from_the_handler
+        # Setting the flag is all this may do. Closing the stream from here deadlocks:
+        # the buffered reader's close() wants the lock that the link thread is holding
+        # while parked in recv, so the handler never returns and nothing ever stops.
+        stopping.set()
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
     logger.info("daemon up, printer kind=%s recorder=%s", settings.printer_kind, settings.recorder_kind)
+    link.start()
 
-    while running:
-        try:
-            # Catch-up first, stream second: anything paid for while this node was
-            # down is in the table but was never pushed to anybody.
-            for ticket in backend.pending_tickets():
-                worker.submit(ticket)
+    # Interruptible on the main thread, so the handler above runs and releases this.
+    stopping.wait()
 
-            for ticket in backend.stream_tickets():
-                worker.submit(ticket)
-
-            logger.warning("stream closed by the backend, reconnecting")
-        except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
-            logger.warning("backend unreachable (%s), retrying", error)
-        except Exception:  # noqa: BLE001 - the daemon must outlive any single failure
-            logger.exception("unexpected failure in the connection loop")
-
-        if running:
-            time.sleep(settings.reconnect_seconds)
+    # Last thing, deliberately: a job already on the paper gets finished and reported
+    # before the process goes away.
+    worker.stop()
+    logger.info("daemon stopped")
 
 
 if __name__ == "__main__":
