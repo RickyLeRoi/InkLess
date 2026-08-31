@@ -127,6 +127,53 @@ Nel pannello **Zero Trust → Networks → Tunnels**:
 Il tunnel si apre dall'interno: **nessuna porta va aperta sul router**, ed è il punto di tutta
 la topologia. Se ti ritrovi a fare port forwarding, hai sbagliato strada.
 
+### 2.1 Cloudflare Access davanti alla dashboard admin
+
+La Basic auth è il pavimento, non la porta blindata. Access mette un'autenticazione vera
+davanti al pannello di moderazione, e costa cinque minuti.
+
+> **Attenzione, è una trappola:** una Access application configurata sul **path** `/admin`
+> non scatterebbe **mai**. Il router del frontend è hash-based, quindi il pannello vive su
+> `https://<dominio>/#/admin` e il fragment **non lascia mai il browser**: Cloudflare,
+> cloudflared e nginx vedono tutti e tre `GET /`. Crederesti di aver protetto l'admin e non
+> avresti protetto niente.
+>
+> Non funziona nemmeno metterla su `/api/admin/*`: quelle sono chiamate `fetch()`, Access
+> risponderebbe con un 302 verso la pagina di login cross-origin, e la fetch morirebbe in
+> CORS invece di autenticare.
+>
+> **La strada che funziona è un hostname dedicato.**
+
+1. **Secondo Public Hostname sullo stesso tunnel.** In *Networks → Tunnels → il tuo tunnel
+   → Public Hostnames*, aggiungi:
+   - **Hostname:** `admin.<dominio>`
+   - **Service:** `http://inkless-frontend:80` — lo stesso servizio del sito pubblico.
+     `server_name _` in [nginx.conf](docker/nginx.conf) accetta già qualunque hostname,
+     quindi non c'è niente da cambiare nel container.
+
+2. **Access application.** In *Zero Trust → Access → Applications → Add an application →
+   Self-hosted*:
+   - **Application domain:** `admin.<dominio>`, **senza path**. Tutto l'hostname.
+   - **Session duration:** quello che ti va, 24h è ragionevole.
+
+3. **Policy.** Action *Allow*, con una regola `Emails` che contiene solo la tua.
+   Come metodo di login **One-time PIN** basta e non richiede di collegare un IdP.
+   Se un domani ti serve raggiungerlo da uno script, aggiungi una seconda policy
+   *Service Auth* con un service token, invece di allargare la prima.
+
+4. **Aggiungi l'hostname a `CORS_ORIGIN`** in `.env.homeserver`, separato da virgola:
+   `CORS_ORIGIN=https://<dominio>,https://admin.<dominio>`.
+
+5. **Verifica.** In finestra anonima, `https://admin.<dominio>` deve mandarti al login
+   Cloudflare *prima* di mostrare qualsiasi cosa. Poi il browser tiene il cookie
+   `CF_Authorization` per quell'hostname e le chiamate a `/api/admin/*` — che sono
+   same-origin — se lo portano dietro da sole. Il frontend usa path relativi, non va
+   toccato niente.
+
+**La Basic auth resta sotto**, e non è ridondanza: Access protegge il tunnel, non la porta
+3000 sulla LAN. Da dentro casa la password è ancora l'unica cosa tra un dispositivo e la
+dashboard — motivo per cui dev'essere generata, non scelta.
+
 ---
 
 ## 3. Home server — backend

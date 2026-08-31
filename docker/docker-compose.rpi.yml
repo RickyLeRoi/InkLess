@@ -41,9 +41,19 @@ services:
       - overlay:/shared
     security_opt:
       - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   streamer:
-    image: linuxserver/ffmpeg:latest
+    # 20260831 ** RG #pin_third_party_images
+    # Pinned to the digest, see the note in docker-compose.homeserver.yml. This one has
+    # the camera device handed to it, which is not an image to accept sight unseen.
+    image: linuxserver/ffmpeg:latest@sha256:9739814c60a6ce1a6b78f6b5de8b5f5d70356413fcfab6064adcf9f3031efdb7
     restart: unless-stopped
     # Opt-in: an empty STREAM_INGEST_URL would leave ffmpeg with a truncated command, so
     # the service starts only on `--profile stream`, never by accident.
@@ -64,6 +74,14 @@ services:
       - daemon
     security_opt:
       - no-new-privileges:true
+    # ffmpeg encoding on a Pi 4: generous, but still a ceiling.
+    mem_limit: 512m
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   clips:

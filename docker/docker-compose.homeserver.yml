@@ -15,6 +15,13 @@
 # Deliberately not a shared .env: the hardware node reads .env.rpi, which carries no
 # payment key, no admin password and no tunnel token.
 
+# 20260831 ++ RG #blast_radius_stops_here
+# Every service below carries mem_limit / cpus / pids_limit and a capped log driver.
+# This host is not dedicated: paperless, nextcloud, vaultwarden and pihole live on it
+# too. Without a ceiling, an OOM here does not take down InkLess, it takes down the
+# DNS of the whole house and the password manager with it. The numbers are deliberately
+# generous — they are a fence against runaway, not a tuning exercise.
+
 services:
   # Service names carry the project prefix on purpose: this file is not always the
   # only compose file on the host, and `backend` is the first name anyone else takes.
@@ -43,6 +50,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   inkless-frontend:
     image: ghcr.io/rickyleroi/inkless-frontend:latest
@@ -65,9 +80,22 @@ services:
       - /var/cache/nginx
       - /var/run
       - /tmp
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    # 20260831 ** RG #pin_third_party_images
+    # Was :latest, so `docker compose pull` fetched whatever existed at that moment with
+    # nothing to compare it against. The digest is the immutable identity; the tag stays
+    # for readability and so Dependabot can offer the next one. Same reasoning as the
+    # SHA-pinned GitHub Actions — and this one runs on the network, not in a runner.
+    image: cloudflare/cloudflared:latest@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
@@ -80,6 +108,14 @@ services:
       - inkless-frontend
     security_opt:
       - no-new-privileges:true
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   frontend_net:

@@ -26,3 +26,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # 20260831 ++ RG #pin_third_party_images
+  # The compose files pin cloudflared and linuxserver/ffmpeg to a digest, which is only
+  # an improvement while something keeps the digest current — otherwise a pin is just a
+  # stale image with extra steps. This is that something. Covers the Dockerfiles in the
+  # same directory too.
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
