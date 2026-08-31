@@ -14,6 +14,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    // 20260831 ** RG #no_sourcemaps_in_production
+    // nginx serves whatever lands in dist/, so `true` published the readable sources
+    // next to the bundle. Switch to 'hidden' the day an error tracker needs them.
+    sourcemap: false
   }
 });

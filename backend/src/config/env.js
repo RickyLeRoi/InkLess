@@ -29,6 +29,19 @@ function integer(name, fallback) {
 }
 
 /**
+ * Comma-separated list, or the fallback when unset.
+ *
+ * @param {string} name
+ * @param {string[]} fallback
+ * @returns {string[]}
+ */
+function list(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  return raw.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+/**
  * @returns {any}
  */
 export function loadConfig() {
@@ -44,6 +57,13 @@ export function loadConfig() {
     // admin.user/admin.password/hardwareToken already fail loud when missing in production;
     // this fell back to '*' silently instead, which defeats the point of having it at all.
     corsOrigin: isProduction ? required('CORS_ORIGIN') : (process.env.CORS_ORIGIN ?? '*'),
+
+    // 20260831 ** RG #forgeable_client_ip
+    // Which hops may be believed when they say who the caller is. Was 'trust everyone',
+    // which handed request.ip straight to whoever wrote X-Forwarded-For. Private ranges
+    // cover the nginx and cloudflared containers; anything arriving from a public
+    // address is the last hop we stop at. Accepts proxy-addr names or CIDRs.
+    trustedProxies: list('TRUSTED_PROXIES', ['loopback', 'uniquelocal']),
 
     admin: {
       user: isProduction ? required('ADMIN_USER') : (process.env.ADMIN_USER ?? 'admin'),

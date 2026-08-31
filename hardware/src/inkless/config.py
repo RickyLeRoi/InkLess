@@ -35,20 +35,46 @@ def _int(name: str, fallback: int) -> int:
     return int(raw, 0)
 
 
+DEV_HARDWARE_TOKEN = "inkless-dev-hardware"
+
+
+def _hardware_token(printer_kind: str, recorder_kind: str) -> str:
+    """The shared secret, refusing to fall back to the development one on real hardware.
+
+    20260831 ++ RG #no_dev_token_on_real_hardware
+    The Node side already fails loud when HARDWARE_TOKEN is missing in production; this
+    side quietly used the well-known development string instead. A node wired to the
+    printer would come up, get 401 on every callback and print nothing, and the logs
+    would blame the network rather than a missing variable.
+    """
+    token = os.environ.get("HARDWARE_TOKEN", "").strip()
+    if token:
+        return token
+
+    if printer_kind != "fake" or recorder_kind != "fake":
+        raise RuntimeError(
+            "HARDWARE_TOKEN is required unless both PRINTER_KIND and RECORDER_KIND are fake"
+        )
+    return DEV_HARDWARE_TOKEN
+
+
 def load_settings() -> Settings:
     """Everything unknown about this node comes from the environment.
 
     The defaults describe a laptop with no hardware attached, which is exactly the
     situation until the printer and the webcam are actually bought.
     """
+    printer_kind = os.environ.get("PRINTER_KIND", "fake")
+    recorder_kind = os.environ.get("RECORDER_KIND", "fake")
+
     return Settings(
         backend_url=os.environ.get("BACKEND_URL", "http://127.0.0.1:3000"),
-        hardware_token=os.environ.get("HARDWARE_TOKEN", "inkless-dev-hardware"),
-        printer_kind=os.environ.get("PRINTER_KIND", "fake"),
+        hardware_token=_hardware_token(printer_kind, recorder_kind),
+        printer_kind=printer_kind,
         printer_spool_path=os.environ.get("PRINTER_SPOOL_PATH", "/tmp/inkless-spool.txt"),
         printer_vendor_id=_int("PRINTER_USB_VENDOR_ID", 0),
         printer_product_id=_int("PRINTER_USB_PRODUCT_ID", 0),
-        recorder_kind=os.environ.get("RECORDER_KIND", "fake"),
+        recorder_kind=recorder_kind,
         webcam_device=os.environ.get("WEBCAM_DEVICE", "/dev/video0"),
         uploader_kind=os.environ.get("UPLOADER_KIND", "local"),
         clips_directory=os.environ.get("CLIPS_DIRECTORY", "/tmp/inkless-clips"),

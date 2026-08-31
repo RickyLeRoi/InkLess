@@ -35,6 +35,30 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   failed: []
 });
 
+/**
+ * Schemes a clip URL may carry. An allowlist rather than a 'javascript:' blocklist:
+ * the danger is any scheme the browser executes, and that set is longer than it looks
+ * (data:, blob:, vbscript:). http is in because the clip is served over plain HTTP in
+ * development and in the e2e stack; in production it inherits the site's https.
+ */
+const CLIP_URL_SCHEMES = Object.freeze(['https:', 'http:']);
+
+/**
+ * @param {string} value
+ */
+function assertSafeClipUrl(value) {
+  /** @type {URL} */
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ValidationError('Clip URL is not a URL');
+  }
+  if (!CLIP_URL_SCHEMES.includes(parsed.protocol)) {
+    throw new ValidationError(`Clip URL scheme is not allowed: ${parsed.protocol}`);
+  }
+}
+
 export class PrintJob {
   /**
    * @param {object} state
@@ -131,11 +155,20 @@ export class PrintJob {
     this.#transitionTo(PrintJobStatus.PRINTING);
   }
 
-  /** @param {string | null} [videoUrl] */
+  /**
+   * 20260831 ** RG #clip_url_must_be_safe
+   * The URL comes off the hardware node and ends up in an href and a <video src>.
+   * The route schema only asks AJV for 'a URI', which "javascript:alert(1)" satisfies
+   * perfectly well. The node is authenticated, so this is depth rather than a live
+   * hole — but a scheme allowlist is one line and the alternative is a stored XSS.
+   *
+   * @param {string | null} [videoUrl]
+   */
   complete(videoUrl = null) {
     if (videoUrl && !this.includesVideo) {
       throw new ValidationError('This tier did not pay for a video clip');
     }
+    if (videoUrl) assertSafeClipUrl(videoUrl);
     this.#transitionTo(PrintJobStatus.COMPLETED);
     this.videoUrl = videoUrl;
   }

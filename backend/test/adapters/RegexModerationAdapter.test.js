@@ -253,3 +253,21 @@ describe('spam and contact details', () => {
     assert.ok(result.reasons.includes('character_flood'));
   });
 });
+
+describe('RegexModerationAdapter bounds its own input', () => {
+  // 20260831 ++ RG #bounded_before_matching
+  // normalizeMessageText caps the body long before the adapter sees it, but that
+  // guarantee lives in another module. Refusing rather than truncating: judging the
+  // first 200 characters of a longer string and calling it clean is a bypass.
+  it('parks an oversized body on a human instead of scanning it', async () => {
+    const result = await new RegexModerationAdapter().evaluate('a'.repeat(5000));
+    assert.equal(result.verdict, ModerationVerdict.NEEDS_REVIEW);
+    assert.deepEqual(result.reasons, ['oversized']);
+  });
+
+  it('parks an oversized handle the same way', async () => {
+    const result = await new RegexModerationAdapter().evaluateHandle('a'.repeat(500));
+    assert.equal(result.verdict, ModerationVerdict.NEEDS_REVIEW);
+    assert.deepEqual(result.reasons, ['handle_oversized']);
+  });
+});

@@ -6,6 +6,9 @@ import { ValidationError } from '../../domain/errors.js';
 
 const CURRENCY = 'EUR';
 
+/** Same budget the Stripe adapter allows a signature, for the same reason. */
+const SIGNATURE_TOLERANCE_SECONDS = 300;
+
 const API_BASE = Object.freeze({
   live: 'https://api-m.paypal.com',
   sandbox: 'https://api-m.sandbox.paypal.com'
@@ -190,6 +193,20 @@ export class PayPalPaymentAdapter {
     }
     if (algorithm !== 'SHA256withRSA') {
       throw new ValidationError(`Unsupported PayPal signature algorithm: ${algorithm}`);
+    }
+
+    // 20260831 ++ RG #paypal_replay_window
+    // The signature covers the transmission time but nothing was checking it, so a
+    // captured webhook stayed valid for ever. markPaid() already makes a replay
+    // harmless, but an authentication step should not be the one leaving the door open.
+    // The timestamp is inside the signed string, so it cannot be edited to fit.
+    const sentAt = Date.parse(transmissionTime);
+    if (Number.isNaN(sentAt)) {
+      throw new ValidationError('Malformed PayPal transmission time');
+    }
+    const age = Math.abs(Date.now() - sentAt) / 1000;
+    if (age > SIGNATURE_TOLERANCE_SECONDS) {
+      throw new ValidationError('PayPal signature is outside the replay window');
     }
 
     const certificate = await this.#certificate(certUrl);

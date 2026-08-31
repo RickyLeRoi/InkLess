@@ -130,8 +130,8 @@ export class Stack {
     });
 
     await this.#waitOrExplain(
-      'the hardware node to appear on /health',
-      async () => (await this.health()).hardwareOnline === true
+      'the hardware node to appear on the admin API',
+      async () => (await this.hardwareOnline()) === true
     );
   }
 
@@ -173,7 +173,7 @@ export class Stack {
 
     await this.#waitOrExplain(
       'the backend to notice the node is gone',
-      async () => (await this.health()).hardwareOnline === false
+      async () => (await this.hardwareOnline()) === false
     );
 
     return elapsed;
@@ -194,6 +194,17 @@ export class Stack {
   async health() {
     const response = await fetch(`${this.baseUrl}/health`);
     return response.json();
+  }
+
+  /**
+   * Whether the backend can see a hardware node. Behind admin auth since 20260831:
+   * /health is unauthenticated and says only that the process is up.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async hardwareOnline() {
+    const response = await this.json('GET', '/api/admin/hardware', { admin: true });
+    return response.body.online === true;
   }
 
   /**

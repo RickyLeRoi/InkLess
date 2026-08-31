@@ -89,3 +89,39 @@ describe('PrintJob lifecycle', () => {
     assert.equal(job.failureReason, 'printer offline');
   });
 });
+
+describe('PrintJob.complete rejects a clip URL a browser would execute', () => {
+  /** @param {string} url */
+  function completeWith(url) {
+    const job = PrintJob.request({ messageId: 'msg-1', amountCents: 100 });
+    job.markPaid();
+    job.start();
+    return () => job.complete(url);
+  }
+
+  // 20260831 ++ RG #clip_url_must_be_safe
+  // The route schema asks AJV for `format: uri`, and "javascript:alert(1)" is a
+  // perfectly well-formed URI. It lands in an href and a <video src>, so the scheme
+  // is checked where the value becomes part of the job rather than at the edge.
+  for (const hostile of [
+    'javascript:alert(document.domain)',
+    'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+    'vbscript:msgbox(1)'
+  ]) {
+    it(`refuses ${hostile.split(':')[0]}:`, () => {
+      assert.throws(completeWith(hostile), { code: 'VALIDATION_FAILED' });
+    });
+  }
+
+  it('refuses something that is not a URL at all', () => {
+    assert.throws(completeWith('non una url'), { code: 'VALIDATION_FAILED' });
+  });
+
+  it('still accepts the http URL the local uploader produces', () => {
+    const job = PrintJob.request({ messageId: 'msg-1', amountCents: 100 });
+    job.markPaid();
+    job.start();
+    job.complete('http://127.0.0.1:8080/clips/job-1.mp4');
+    assert.equal(job.videoUrl, 'http://127.0.0.1:8080/clips/job-1.mp4');
+  });
+});

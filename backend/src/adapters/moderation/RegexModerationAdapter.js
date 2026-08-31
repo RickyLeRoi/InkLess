@@ -1,6 +1,7 @@
 // backend/src/adapters/moderation/RegexModerationAdapter.js
 
 import { ModerationVerdict } from '../../ports/ModerationPort.js';
+import { INSTAGRAM_HANDLE_MAX_LENGTH, MESSAGE_MAX_LENGTH } from '../../domain/text.js';
 import { BLASPHEMY, HARD_REJECT, PROFANITY, SUSPICIOUS } from './blocklist.js';
 
 /** @type {Readonly<Record<string, string>>} */
@@ -147,6 +148,25 @@ function isShouting(text) {
   return uppercase / letters.length >= SHOUTING_RATIO;
 }
 
+/**
+ * 20260831 ++ RG #bounded_before_matching
+ * Every matcher below is an alternation of dozens of words, each letter separated by
+ * an optional 'junk' class, run over the whole input on the synchronous submission
+ * path. Today normalizeMessageText caps the text long before it gets here, so the
+ * cost is bounded — but the guarantee lives in another module, and a future caller
+ * that skips it would hand this a megabyte to backtrack through.
+ *
+ * Refusing outright rather than truncating: scanning the first 200 characters of a
+ * longer string and calling it clean is exactly how a filter gets walked past.
+ *
+ * @param {string} value
+ * @param {number} limit
+ * @returns {boolean}
+ */
+function withinBounds(value, limit) {
+  return value.length <= limit;
+}
+
 /** Satisfies the ModerationPort contract. */
 export class RegexModerationAdapter {
   constructor() {
@@ -188,6 +208,10 @@ export class RegexModerationAdapter {
    * @returns {Promise<import('../../ports/ModerationPort.js').ModerationResult>}
    */
   async evaluateHandle(handle) {
+    if (!withinBounds(handle, INSTAGRAM_HANDLE_MAX_LENGTH)) {
+      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['handle_oversized'] };
+    }
+
     const folded = fold(handle);
     const squeezed = squeezeRuns(folded);
 
@@ -212,6 +236,10 @@ export class RegexModerationAdapter {
    * @returns {Promise<import('../../ports/ModerationPort.js').ModerationResult>}
    */
   async evaluate(text) {
+    if (!withinBounds(text, MESSAGE_MAX_LENGTH)) {
+      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['oversized'] };
+    }
+
     const folded = fold(text);
     const squeezed = squeezeRuns(folded);
 

@@ -4,6 +4,23 @@ import { useEffect, useState } from 'react';
 import { fetchJob, streamJob } from '../api.js';
 import { navigate } from '../router.js';
 
+// 20260831 ++ RG #clip_url_must_be_safe
+// The backend already refuses anything but http/https, so this is the second lock on
+// the same door: React escapes text but happily renders href="javascript:...".
+const CLIP_URL_SCHEMES = ['https:', 'http:'];
+
+/** @param {unknown} value */
+function safeClipUrl(value) {
+  if (typeof value !== 'string') return null;
+  try {
+    return CLIP_URL_SCHEMES.includes(new URL(value, window.location.href).protocol)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const STATUS_COPY = {
   awaiting_payment: 'In attesa del pagamento...',
   queued: 'In coda. La stampante sta per svegliarsi.',
@@ -49,6 +66,8 @@ export function JobPage({ jobId }) {
 
   if (!job) return <div className="skeleton" />;
 
+  const clipUrl = safeClipUrl(job.videoUrl);
+
   return (
     <section>
       <h2>Stampa in corso</h2>
@@ -60,18 +79,18 @@ export function JobPage({ jobId }) {
         </p>
       ) : null}
 
-      {job.status === 'completed' && job.videoUrl ? (
+      {job.status === 'completed' && clipUrl ? (
         <div>
-          <video src={job.videoUrl} controls playsInline style={{ width: '100%', maxWidth: '32rem' }} />
+          <video src={clipUrl} controls playsInline style={{ width: '100%', maxWidth: '32rem' }} />
           <div className="receipt__actions">
-            <a className="status-pill" href={job.videoUrl} target="_blank" rel="noreferrer noopener">
+            <a className="status-pill" href={clipUrl} target="_blank" rel="noreferrer noopener">
               Apri il video
             </a>
           </div>
         </div>
       ) : null}
 
-      {job.status === 'completed' && !job.videoUrl ? (
+      {job.status === 'completed' && !clipUrl ? (
         <div className="notice" data-tone="ok">
           Il messaggio è uscito dalla stampante. Niente video con questa donazione.
         </div>

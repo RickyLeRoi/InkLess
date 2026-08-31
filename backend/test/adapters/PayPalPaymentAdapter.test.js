@@ -75,12 +75,14 @@ function buildAdapter() {
  * bytes themselves.
  *
  * @param {any} event
- * @param {{ certUrl?: string, webhookId?: string }} [options]
+ * @param {{ certUrl?: string, webhookId?: string, transmissionTime?: string }} [options]
  */
 function signedWebhook(event, options = {}) {
   const rawBody = Buffer.from(JSON.stringify(event), 'utf8');
   const transmissionId = 'tx-1';
-  const transmissionTime = '2026-08-31T10:00:00Z';
+  // Now, not a fixed date: the adapter rejects anything outside its replay window, so
+  // a hardcoded timestamp would start failing the day after it was written.
+  const transmissionTime = options.transmissionTime ?? new Date().toISOString();
   const signed = [
     transmissionId,
     transmissionTime,
@@ -116,6 +118,31 @@ function captureOf(value) {
     ]
   };
 }
+
+describe('PayPalPaymentAdapter replay window', () => {
+  it('refuses a correctly signed webhook that is hours old', async () => {
+    // 20260831 ++ RG #paypal_replay_window
+    // The signature stays valid for ever by construction, so without a freshness check
+    // a captured callback could be replayed at any point in the future. The timestamp
+    // is inside the signed string, so an attacker cannot refresh it either.
+    const stale = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+    const { rawBody, headers } = signedWebhook(approvalOf(), { transmissionTime: stale });
+
+    await assert.rejects(
+      () => buildAdapter().verifyCallback(rawBody, headers),
+      /replay window/
+    );
+  });
+
+  it('refuses a transmission time that is not a date', async () => {
+    const { rawBody, headers } = signedWebhook(approvalOf(), { transmissionTime: 'ieri' });
+
+    await assert.rejects(
+      () => buildAdapter().verifyCallback(rawBody, headers),
+      /transmission time/
+    );
+  });
+});
 
 describe('PayPalPaymentAdapter.createCheckout', () => {
   it('prices the order without ever touching a float', async () => {

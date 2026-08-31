@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 10
 
+# 20260831 ++ RG #stream_needs_a_timeout
+# The event stream was opened with no timeout at all: a backend that accepted the
+# socket and then stopped talking parked the link thread for ever, and the daemon went
+# on looking healthy while printing nothing. This is a read timeout, so it has to
+# outlast the server's 25s keep-alive comment — otherwise an idle but perfectly
+# healthy stream would be torn down every minute. Tripping it raises TimeoutError,
+# which the connection loop already treats as "reconnect".
+STREAM_TIMEOUT = 60
+
 
 class HttpBackend:
     """Talks to the Node backend over the segregated LAN link.
@@ -71,7 +80,7 @@ class HttpBackend:
             headers={"Authorization": f"Bearer {self.token}", "Accept": "text/event-stream"},
         )
 
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=STREAM_TIMEOUT) as response:
             event_name = ""
             for raw_line in response:
                 line = raw_line.decode("utf-8").rstrip("\n")

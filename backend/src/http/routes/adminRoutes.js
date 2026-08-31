@@ -2,6 +2,7 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { MESSAGE_MAX_LENGTH } from '../../domain/text.js';
+import { socketAddress } from '../clientAddress.js';
 
 /**
  * @param {string} a
@@ -20,7 +21,7 @@ function constantTimeEquals(a, b) {
  * @param {any} options
  */
 export async function adminRoutes(fastify, options) {
-  const { config, moderateMessage, escalation } = options;
+  const { config, moderateMessage, escalation, printQueue } = options;
 
   // 20260831 ++ RG #admin_rate_limit
   // Basic auth on its own has no lockout: without this, a weak admin password can be
@@ -28,7 +29,17 @@ export async function adminRoutes(fastify, options) {
   // auth hook below so failed attempts get throttled too, not just successful ones — the
   // rate-limit plugin's route-config mode only attaches to a route's own onRequest hooks,
   // which run after plugin-level ones, so this has to be wired in by hand instead.
-  fastify.addHook('onRequest', fastify.rateLimit({ max: 30, timeWindow: '1 minute' }));
+  //
+  // 20260831 ** RG #forgeable_client_ip
+  // Keyed on the socket, not on any header. This surface answers on the LAN as well as
+  // through the tunnel, and there is no proxy in front of the LAN path: keying it on a
+  // forwarded address would let an attacker draw a fresh 30-attempt budget per guess,
+  // which is the whole protection gone. Through the tunnel every attempt shares nginx's
+  // address, so the 30/minute becomes a global ceiling — correct for a one-person panel.
+  fastify.addHook(
+    'onRequest',
+    fastify.rateLimit({ max: 30, timeWindow: '1 minute', keyGenerator: socketAddress })
+  );
 
   // 20260830 ++ RG #admin_basic_auth
   // Basic auth is the in-app floor, not the whole defence: the spec puts the admin
@@ -88,6 +99,11 @@ export async function adminRoutes(fastify, options) {
       };
     }
   );
+
+  // Moved off the public /health, which is unauthenticated and answers on the LAN.
+  fastify.get('/hardware', async () => ({
+    online: await printQueue.isHardwareOnline()
+  }));
 
   // Forces a batch regardless of the threshold, for when the queue is small but the
   // admin would rather not read it by hand.
