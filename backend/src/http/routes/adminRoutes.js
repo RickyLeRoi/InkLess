@@ -22,6 +22,14 @@ function constantTimeEquals(a, b) {
 export async function adminRoutes(fastify, options) {
   const { config, moderateMessage, escalation } = options;
 
+  // 20260831 ++ RG #admin_rate_limit
+  // Basic auth on its own has no lockout: without this, a weak admin password can be
+  // brute-forced straight against the API, no browser involved. Registered before the
+  // auth hook below so failed attempts get throttled too, not just successful ones — the
+  // rate-limit plugin's route-config mode only attaches to a route's own onRequest hooks,
+  // which run after plugin-level ones, so this has to be wired in by hand instead.
+  fastify.addHook('onRequest', fastify.rateLimit({ max: 30, timeWindow: '1 minute' }));
+
   // 20260830 ++ RG #admin_basic_auth
   // Basic auth is the in-app floor, not the whole defence: the spec puts the admin
   // subdomain behind Cloudflare Access as well. Comparison is constant-time so the

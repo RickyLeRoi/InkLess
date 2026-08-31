@@ -1,0 +1,28 @@
+# .github/dependabot.yml
+#
+# Weekly PRs for outdated dependencies across all three modules, plus the GitHub Actions
+# used in .github/workflows/. The actions are pinned to commit SHA (see docker-*.yml) so
+# Dependabot's PRs there bump the pinned SHA and its version comment together, rather
+# than leaving the pin to go stale by hand.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/hardware"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

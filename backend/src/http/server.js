@@ -38,8 +38,14 @@ export async function buildServer(deps) {
     methods: ['GET', 'POST', 'PATCH']
   });
 
+  // 20260831 ** RG #rate_limit_default_on
+  // Was global:false with only submit/print opting in — board search, job status, the
+  // SSE streams and the payment webhook were all unthrottled. Flipping the default closes
+  // that by construction: a route added later is covered unless someone deliberately
+  // opts it out, instead of being silently unprotected until someone remembers to opt it
+  // in. Submit/print keep their own tighter config.rateLimit, which still wins per-route.
   await fastify.register(rateLimit, {
-    global: false,
+    global: true,
     max: 60,
     timeWindow: '1 minute'
   });

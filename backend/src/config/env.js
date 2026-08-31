@@ -40,7 +40,10 @@ export function loadConfig() {
     port: integer('PORT', 3000),
     databasePath: process.env.DATABASE_PATH ?? './data/inkless.db',
     publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:5173',
-    corsOrigin: process.env.CORS_ORIGIN ?? '*',
+    // 20260831 ** RG #cors_required_in_production
+    // admin.user/admin.password/hardwareToken already fail loud when missing in production;
+    // this fell back to '*' silently instead, which defeats the point of having it at all.
+    corsOrigin: isProduction ? required('CORS_ORIGIN') : (process.env.CORS_ORIGIN ?? '*'),
 
     admin: {
       user: isProduction ? required('ADMIN_USER') : (process.env.ADMIN_USER ?? 'admin'),

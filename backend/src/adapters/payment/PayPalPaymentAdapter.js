@@ -23,6 +23,9 @@ const CERT_HOSTS = Object.freeze([
   'api-m.sandbox.paypal.com'
 ]);
 
+/** Upper bound on cached certificates, see #cert_cache_bound below. */
+const MAX_CACHED_CERTIFICATES = 10;
+
 /**
  * PayPal over its REST API, same reasoning as the Stripe adapter: a handful of calls
  * does not justify an SDK. Nothing PayPal-shaped escapes this file — see PaymentPort.
@@ -228,6 +231,15 @@ export class PayPalPaymentAdapter {
     }
 
     const pem = await response.text();
+
+    // 20260831 ++ RG #cert_cache_bound
+    // The host is allowlisted above, but the path/query on that host is not — a caller
+    // varying those would otherwise grow this Map forever. Map preserves insertion order,
+    // so the oldest entry is whichever key comes back first.
+    if (this.certificates.size >= MAX_CACHED_CERTIFICATES) {
+      const oldestCertUrl = this.certificates.keys().next().value;
+      if (oldestCertUrl !== undefined) this.certificates.delete(oldestCertUrl);
+    }
     this.certificates.set(certUrl, pem);
     return pem;
   }
