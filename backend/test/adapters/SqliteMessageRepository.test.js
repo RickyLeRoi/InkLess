@@ -82,6 +82,29 @@ describe('SqliteMessageRepository', () => {
     assert.equal(page.total, 2);
   });
 
+  it('lists a status newest first, so the admin sees what was just moderated', async () => {
+    const old = Message.submit({
+      text: 'vecchio',
+      anonymousSequence: 1,
+      now: new Date('2026-01-01T00:00:00.000Z')
+    });
+    const recent = Message.submit({
+      text: 'recente',
+      anonymousSequence: 2,
+      now: new Date('2026-06-01T00:00:00.000Z')
+    });
+    old.approve();
+    recent.approve();
+    await repository.save(old);
+    await repository.save(recent);
+
+    const listed = await repository.findByStatus('approved');
+    assert.deepEqual(
+      listed.map((message) => message.text),
+      ['recente', 'vecchio']
+    );
+  });
+
   it('hands out a fresh anonymous sequence every call', async () => {
     const first = await repository.nextAnonymousSequence();
     const second = await repository.nextAnonymousSequence();

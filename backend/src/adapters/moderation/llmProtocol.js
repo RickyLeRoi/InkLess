@@ -13,8 +13,16 @@ Classifica il messaggio in una sola di queste categorie:
   contenuti sessuali espliciti, minacce, spam commerciale, dati personali altrui.
 - "unsure": qualsiasi cosa su cui hai un dubbio reale.
 
+"unsafe" richiede un bersaglio: qualcuno che viene insultato, minacciato o odiato.
+Una parola volgare da sola non basta.
+
+Molte parole italiane hanno un doppio senso ("finocchio" e' anche un ortaggio, "figa"
+anche un fico, "checca" anche un nome). Giudica il senso nel contesto della frase, mai
+la parola isolata: se la lettura letterale e' plausibile e la frase non attacca
+nessuno, non e' "unsafe" — al massimo "unsure".
+
 Nel dubbio scegli sempre "unsure": un umano rileggera' il messaggio.
-Rispondi esclusivamente con JSON: {"verdict":"safe|unsafe|unsure","reason":"<3 parole>"}`;
+Rispondi esclusivamente con JSON: {"verdict":"safe|unsafe|unsure","reason":"<max 5 parole>"}`;
 
 /**
  * 20260831 ++ RG #llm_verdict_mapping

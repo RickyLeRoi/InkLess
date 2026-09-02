@@ -124,12 +124,16 @@ export class SqliteMessageRepository {
   }
 
   /**
+   * 20260903 ** RG #admin_list_newest_first
+   * Newest first: this feeds the admin filter, where what was just moderated is what
+   * the human wants to see, not the oldest row in the table.
+   *
    * @param {string} status
    * @returns {Promise<Message[]>}
    */
   async findByStatus(status) {
     const rows = this.db
-      .prepare('SELECT * FROM messages WHERE status = ? ORDER BY created_at ASC')
+      .prepare('SELECT * FROM messages WHERE status = ? ORDER BY created_at DESC')
       .all(status);
     return rows.map(toMessage);
   }
