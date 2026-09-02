@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminFetch, isAdmin, storeAdminAuth } from '../adminSession.js';
+import { maskWord } from '../lib/censor.js';
 
 const REASON_LABELS = {
   hate_speech: 'odio',
@@ -25,6 +26,50 @@ function labelFor(reason) {
   if (reason.startsWith('llm_failed:')) return `modello non ha risposto (${reason.split(':')[1]})`;
   if (reason.startsWith('llm:')) return `modello: ${reason.slice(4)}`;
   return REASON_LABELS[reason] ?? reason;
+}
+
+/**
+ * The message laid back out as it was written, with only the words clickable. The
+ * separators come from the offsets the server sends, so punctuation and spacing are
+ * the author's, never reconstructed by guesswork.
+ *
+ * @param {{ text: string, words: any[], censored: number[], onToggle: (index: number) => void }} props
+ */
+function CensorableText({ text, words, censored, onToggle }) {
+  const pieces = [];
+  let cursor = 0;
+
+  for (const word of words) {
+    if (word.start > cursor) {
+      pieces.push(<span key={`gap-${word.index}`}>{text.slice(cursor, word.start)}</span>);
+    }
+
+    const isCensored = censored.includes(word.index);
+    pieces.push(
+      word.censorable ? (
+        <button
+          key={`word-${word.index}`}
+          type="button"
+          className="word"
+          data-censored={isCensored ? 'yes' : 'no'}
+          onClick={() => onToggle(word.index)}
+          title={isCensored ? 'Rimetti in chiaro' : 'Censura'}
+        >
+          {isCensored ? maskWord(word.word) : word.word}
+        </button>
+      ) : (
+        // Two letters have no interior to hide: a toggle here would change nothing
+        // and read as broken.
+        <span key={`word-${word.index}`} className="word word--short">
+          {word.word}
+        </span>
+      )
+    );
+    cursor = word.end;
+  }
+
+  pieces.push(<span key="tail">{text.slice(cursor)}</span>);
+  return <p className="censorable">{pieces}</p>;
 }
 
 export function AdminPage() {
@@ -100,24 +145,58 @@ export function AdminPage() {
     }
   }
 
+  /**
+   * The toggles live in the panel until they are saved, so a wrong click costs a
+   * second click and nothing else.
+   *
+   * @param {any} item
+   */
+  function draftOf(item) {
+    return (
+      drafts[item.id] ?? {
+        censored: item.words
+          .filter(/** @param {any} word */ (word) => word.censored)
+          .map(/** @param {any} word */ (word) => word.index),
+        handleCensored: item.handleCensored
+      }
+    );
+  }
+
+  /**
+   * @param {any} item
+   * @param {any} changes
+   */
+  function setDraft(item, changes) {
+    setDrafts((current) => ({ ...current, [item.id]: { ...draftOf(item), ...changes } }));
+  }
+
+  /**
+   * @param {any} item
+   * @param {number} index
+   */
+  function toggleWord(item, index) {
+    const { censored } = draftOf(item);
+    setDraft(item, {
+      censored: censored.includes(index)
+        ? censored.filter(/** @param {number} kept */ (kept) => kept !== index)
+        : [...censored, index]
+    });
+  }
+
   /** @param {any} item */
-  async function saveEdits(item) {
-    const draft = drafts[item.id] ?? {};
-    /** @type {Record<string, any>} */
-    const body = {};
-
-    if (draft.text !== undefined && draft.text !== item.text) body.text = draft.text;
-    if (draft.handle !== undefined && draft.handle !== (item.authorInstagram ?? '')) {
-      body.authorInstagram = draft.handle;
-    }
-    if (Object.keys(body).length === 0) {
-      setNotice('Niente da salvare su questo messaggio.');
-      return;
-    }
-    body.approve = true;
-
+  async function publish(item) {
+    const draft = draftOf(item);
     try {
-      await adminFetch(`/messages/${item.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await adminFetch(`/messages/${item.id}`, {
+        method: 'PATCH',
+        // Always the complete state, never a delta: the server recomputes the body
+        // from the original, so sending this twice changes nothing.
+        body: JSON.stringify({
+          censoredWords: draft.censored,
+          censorHandle: draft.handleCensored,
+          approve: true
+        })
+      });
       reload();
     } catch (caught) {
       setError(caught.message);
@@ -136,15 +215,6 @@ export function AdminPage() {
     } catch (caught) {
       setError(caught.message);
     }
-  }
-
-  /**
-   * @param {string} id
-   * @param {string} field
-   * @param {string} value
-   */
-  function setDraft(id, field, value) {
-    setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
   }
 
   return (
@@ -173,8 +243,13 @@ export function AdminPage() {
       {items.length === 0 ? <p className="muted">Niente da moderare qui.</p> : null}
 
       {items.map((item) => {
-        const draft = drafts[item.id] ?? {};
-        const handle = draft.handle ?? item.authorInstagram ?? '';
+        const draft = draftOf(item);
+        const identity = item.authorInstagram ? `@${item.authorInstagram}` : item.author;
+        const shownIdentity = draft.handleCensored
+          ? identity.startsWith('@')
+            ? `@${maskWord(identity.slice(1))}`
+            : maskWord(identity)
+          : identity;
 
         return (
           <div key={item.id} className="admin-row">
@@ -198,32 +273,41 @@ export function AdminPage() {
             ) : null}
 
             <div className="field">
-              <label htmlFor={`text-${item.id}`}>Messaggio</label>
-              <textarea
-                id={`text-${item.id}`}
-                value={draft.text ?? item.text}
-                onChange={(event) => setDraft(item.id, 'text', event.target.value)}
+              <label>Messaggio — clicca una parola per censurarla</label>
+              <CensorableText
+                text={item.originalText}
+                words={item.words}
+                censored={draft.censored}
+                onToggle={(index) => toggleWord(item, index)}
               />
-              {item.wasCensored ? (
-                <div className="muted">Originale: {item.originalText}</div>
+              {item.handEdited ? (
+                <div className="notice" data-tone="error">
+                  Questo testo era stato riscritto a mano: ora in bacheca c&apos;è
+                  «{item.text}». Salvando torna all&apos;originale qui sopra, con le sole
+                  parole che censuri.
+                </div>
               ) : null}
             </div>
 
             <div className="field">
-              <label htmlFor={`handle-${item.id}`}>Username</label>
-              <input
-                id={`handle-${item.id}`}
-                type="text"
-                value={handle}
-                placeholder="vuoto = anonimo Doe#NNN"
-                onChange={(event) => setDraft(item.id, 'handle', event.target.value)}
-              />
+              <label>Username</label>
+              <div className="handle-row">
+                <span className="handle" data-censored={draft.handleCensored ? 'yes' : 'no'}>
+                  {shownIdentity}
+                </span>
+                <button
+                  className="ghost"
+                  onClick={() => setDraft(item, { handleCensored: !draft.handleCensored })}
+                >
+                  {draft.handleCensored ? 'Rimetti in chiaro' : 'Censura'}
+                </button>
+              </div>
               <div className="muted">
-                {handle ? (
+                {item.authorInstagram ? (
                   <>
                     Non verifichiamo che esista:{' '}
                     <a
-                      href={`https://instagram.com/${handle.replace(/^@+/, '')}`}
+                      href={`https://instagram.com/${item.authorInstagram}`}
                       target="_blank"
                       rel="noreferrer noopener"
                     >
@@ -231,17 +315,14 @@ export function AdminPage() {
                     </a>
                   </>
                 ) : (
-                  `Firmato come ${item.author}`
+                  'Identità generata: nessun profilo Instagram dietro.'
                 )}
               </div>
             </div>
 
             <div className="receipt__actions">
-              {item.status !== 'approved' ? (
-                <button onClick={() => act(item.id, 'approve')}>Approva cosi</button>
-              ) : null}
-              <button className="ghost" onClick={() => saveEdits(item)}>
-                Salva modifiche e pubblica
+              <button onClick={() => publish(item)}>
+                {item.status === 'approved' ? 'Salva' : 'Pubblica'}
               </button>
               {item.status !== 'rejected' ? (
                 <button className="danger" onClick={() => act(item.id, 'reject')}>

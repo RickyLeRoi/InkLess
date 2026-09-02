@@ -16,7 +16,8 @@ const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
  */
 const ADDED_COLUMNS = [
   { table: 'messages', column: 'llm_reviewed_at', definition: 'TEXT' },
-  { table: 'messages', column: 'moderation_reasons', definition: 'TEXT' }
+  { table: 'messages', column: 'moderation_reasons', definition: 'TEXT' },
+  { table: 'messages', column: 'handle_censored', definition: 'INTEGER NOT NULL DEFAULT 0' }
 ];
 
 /**

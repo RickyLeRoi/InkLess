@@ -221,7 +221,7 @@ describe('admin surface', () => {
       method: 'PATCH',
       url: `/api/admin/messages/${pending.id}`,
       headers: { authorization: ADMIN_AUTH },
-      payload: { text: 'chiamami al ***', approve: true }
+      payload: { censoredWords: [2, 3, 4], approve: true }
     });
 
     assert.equal(response.statusCode, 200);
@@ -229,6 +229,7 @@ describe('admin surface', () => {
 
     const stored = await app.messages.findById(pending.id);
     assert.equal(stored.originalText, 'chiamami al 333 444 5566');
+    assert.equal(stored.text, 'chiamami al 3*3 4*4 5**6');
     assert.equal(stored.wasCensored, true);
   });
 

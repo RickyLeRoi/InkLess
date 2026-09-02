@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS messages (
   -- JSON array of rule identifiers, so the admin panel can say why this is here.
   moderation_reasons TEXT,
 
+  -- The admin blacked out the author's name. A flag rather than a rewritten handle:
+  -- author_instagram cannot hold a "*", and overwriting it would lose the value the
+  -- toggle needs to put back.
+  handle_censored   INTEGER NOT NULL DEFAULT 0,
+
   -- Exactly one identity: a real handle, or a generated Doe#NNN sequence.
   CHECK ((author_instagram IS NOT NULL) <> (author_sequence IS NOT NULL))
 );

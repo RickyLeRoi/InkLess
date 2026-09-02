@@ -55,19 +55,56 @@ describe('Message transitions', () => {
     assert.throws(() => message.approve(), /Cannot move from "approved" to "approved"/);
   });
 
-  it('censors while keeping the original for audit', () => {
-    const message = submit({ text: 'testo originale' });
-    message.censor('testo ***');
-    assert.equal(message.text, 'testo ***');
-    assert.equal(message.originalText, 'testo originale');
+  it('blacks out a word while keeping the original for audit', () => {
+    const message = submit({ text: 'testo cazzuto originale' });
+    message.censorWords([1]);
+    assert.equal(message.text, 'testo c*****o originale');
+    assert.equal(message.originalText, 'testo cazzuto originale');
     assert.equal(message.wasCensored, true);
+    assert.deepEqual(message.censoredWords, [1]);
   });
 
-  it('refuses to censor a rejected message', () => {
-    const message = submit();
-    message.reject();
-    assert.throws(() => message.censor('qualsiasi'), /Cannot move from "rejected"/);
+  it('lifts a censorship when the same set arrives without that word', () => {
+    const message = submit({ text: 'testo cazzuto originale' });
+    message.censorWords([0, 1]);
+    message.censorWords([0]);
+    assert.equal(message.text, 't***o cazzuto originale');
+    assert.deepEqual(message.censoredWords, [0]);
   });
+
+  it('censors a rejected message, so an appeal can be published in one move', () => {
+    const message = submit({ text: 'testo cazzuto originale' });
+    message.reject();
+    message.censorWords([1]);
+    message.approve();
+    assert.equal(message.text, 'testo c*****o originale');
+    assert.equal(message.status, MessageStatus.APPROVED);
+  });
+
+  it('masks the author on demand and puts it back', () => {
+    const message = submit({ authorInstagram: '@bastardo' });
+    message.setHandleCensored(true);
+    assert.equal(message.author, '@b******o');
+    assert.equal(message.authorInstagram, 'bastardo');
+    message.setHandleCensored(false);
+    assert.equal(message.author, '@bastardo');
+  });
+
+  it('masks a Doe identity too', () => {
+    const message = submit({ anonymousSequence: 1 });
+    message.setHandleCensored(true);
+    assert.equal(message.author, 'D*****1');
+  });
+
+  it('flags a body no censorship could have produced', () => {
+    const message = submit({ text: 'testo cazzuto originale' });
+    assert.equal(message.handEdited, false);
+    // What the old free-text panel used to leave behind.
+    message.text = 'tutt altro testo';
+    assert.equal(message.handEdited, true);
+    assert.deepEqual(message.censoredWords, []);
+  });
+
 });
 
 describe('Message.registerPrint', () => {

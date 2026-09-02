@@ -61,8 +61,8 @@ describe('a handle never rejects on its own', () => {
   });
 });
 
-describe('editing from the panel', () => {
-  it('censors the handle and publishes', async () => {
+describe('the panel censors, it does not rewrite', () => {
+  it('blacks out the handle and publishes, keeping the real one on the row', async () => {
     await submit({ text: 'Ciao a tutti', authorInstagram: '@ilterronedelsud' });
     const [item] = await queue();
 
@@ -70,46 +70,94 @@ describe('editing from the panel', () => {
       method: 'PATCH',
       url: `/api/admin/messages/${item.id}`,
       headers: ADMIN,
-      payload: { authorInstagram: '@utente_educato', approve: true }
+      payload: { censorHandle: true, approve: true }
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().author, '@utente_educato');
+    assert.equal(response.json().author, '@i*************d');
 
     const board = await server.inject({ method: 'GET', url: '/api/messages' });
-    assert.equal(board.json().items[0].author, '@utente_educato');
+    assert.equal(board.json().items[0].author, '@i*************d');
+
+    // The verbatim handle stays in the row: it is what the toggle puts back, and the
+    // profile link is still the real one.
+    const stored = await app.messages.findById(item.id);
+    assert.equal(stored.authorInstagram, 'ilterronedelsud');
   });
 
-  it('anonymises the author when the handle is blanked', async () => {
+  it('puts the handle back when the toggle goes off', async () => {
     await submit({ text: 'Ciao a tutti', authorInstagram: '@ilterronedelsud' });
     const [item] = await queue();
 
+    await server.inject({
+      method: 'PATCH',
+      url: `/api/admin/messages/${item.id}`,
+      headers: ADMIN,
+      payload: { censorHandle: true, approve: true }
+    });
     const response = await server.inject({
       method: 'PATCH',
       url: `/api/admin/messages/${item.id}`,
       headers: ADMIN,
-      payload: { authorInstagram: '', approve: true }
+      payload: { censorHandle: false }
     });
 
-    // Blanking must leave an identity behind, never a row with neither.
-    assert.match(response.json().author, /^Doe#\d{3}$/);
+    assert.equal(response.json().author, '@ilterronedelsud');
   });
 
-  it('edits body and handle in one call', async () => {
+  it('blacks out body and handle in one call', async () => {
     await submit({ text: 'chiamami al 333 444 5566', authorInstagram: '@figadilegno' });
+    const [item] = await queue();
+
+    // Word indices come from the queue itself, which is where the panel reads them.
+    assert.deepEqual(
+      item.words.map(/** @param {any} word */ (word) => word.word),
+      ['chiamami', 'al', '333', '444', '5566']
+    );
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/admin/messages/${item.id}`,
+      headers: ADMIN,
+      payload: { censoredWords: [2, 3, 4], censorHandle: true, approve: true }
+    });
+
+    const body = response.json();
+    assert.equal(body.text, 'chiamami al 3*3 4*4 5**6');
+    assert.equal(body.author, '@f*********o');
+    assert.equal(body.status, 'approved');
+  });
+
+  it('reports the toggle state back to the panel', async () => {
+    await submit({ text: 'chiamami al 333 444 5566' });
+    const [before] = await queue();
+    assert.equal(before.handEdited, false);
+    assert.equal(before.handleCensored, false);
+
+    await server.inject({
+      method: 'PATCH',
+      url: `/api/admin/messages/${before.id}`,
+      headers: ADMIN,
+      payload: { censoredWords: [0] }
+    });
+
+    const [after] = await queue();
+    assert.equal(after.words[0].censored, true);
+    assert.equal(after.words[1].censorable, false);
+  });
+
+  it('has no way left to publish text nobody wrote', async () => {
+    await submit({ text: 'chiamami al 333 444 5566' });
     const [item] = await queue();
 
     const response = await server.inject({
       method: 'PATCH',
       url: `/api/admin/messages/${item.id}`,
       headers: ADMIN,
-      payload: { text: 'chiamami quando puoi', authorInstagram: '@legno', approve: true }
+      payload: { text: 'tutta un altra cosa', approve: true }
     });
 
-    const body = response.json();
-    assert.equal(body.text, 'chiamami quando puoi');
-    assert.equal(body.author, '@legno');
-    assert.equal(body.status, 'approved');
+    assert.equal(response.statusCode, 400);
   });
 
   it('refuses an empty patch', async () => {
@@ -124,6 +172,24 @@ describe('editing from the panel', () => {
     });
 
     assert.equal(response.statusCode, 400);
+  });
+
+  /** The appeal path: rejected, blacked out, published, in a single call. */
+  it('censors and publishes a rejected message', async () => {
+    const created = await submit({ text: 'sei un terrone' });
+    assert.equal(created.status, 'rejected');
+
+    const [item] = await queue('rejected');
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/admin/messages/${item.id}`,
+      headers: ADMIN,
+      payload: { censoredWords: [2], approve: true }
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().text, 'sei un t*****e');
+    assert.equal(response.json().status, 'approved');
   });
 });
 

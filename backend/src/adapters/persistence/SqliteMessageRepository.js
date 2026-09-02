@@ -21,7 +21,8 @@ function toMessage(row) {
     printCount: row.print_count,
     createdAt: new Date(row.created_at),
     llmReviewedAt: row.llm_reviewed_at ? new Date(row.llm_reviewed_at) : null,
-    moderationReasons: parseReasons(row.moderation_reasons)
+    moderationReasons: parseReasons(row.moderation_reasons),
+    handleCensored: row.handle_censored === 1
   });
 }
 
@@ -52,8 +53,8 @@ export class SqliteMessageRepository {
       .prepare(
         `INSERT INTO messages
            (id, original_text, text, author_instagram, author_sequence, status,
-            print_count, created_at, llm_reviewed_at, moderation_reasons)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            print_count, created_at, llm_reviewed_at, moderation_reasons, handle_censored)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            text = excluded.text,
            author_instagram = excluded.author_instagram,
@@ -61,7 +62,8 @@ export class SqliteMessageRepository {
            status = excluded.status,
            print_count = excluded.print_count,
            llm_reviewed_at = excluded.llm_reviewed_at,
-           moderation_reasons = excluded.moderation_reasons`
+           moderation_reasons = excluded.moderation_reasons,
+           handle_censored = excluded.handle_censored`
       )
       .run(
         message.id,
@@ -73,7 +75,8 @@ export class SqliteMessageRepository {
         message.printCount,
         message.createdAt.toISOString(),
         message.llmReviewedAt ? message.llmReviewedAt.toISOString() : null,
-        JSON.stringify(message.moderationReasons)
+        JSON.stringify(message.moderationReasons),
+        message.handleCensored ? 1 : 0
       );
   }
 

@@ -518,6 +518,57 @@ button.danger:hover:not(:disabled) {
   padding: 1rem 0;
 }
 
+/* 20260903 ++ RG #word_censorship
+   The message is read, not edited: it keeps the body typography of a receipt, and the
+   only interactive parts are the words themselves. */
+.censorable {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.9;
+}
+
+.word {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0 0.1rem;
+  cursor: pointer;
+}
+
+.word:hover {
+  border-color: var(--rule);
+}
+
+.word[data-censored='yes'] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.word--short {
+  padding: 0 0.1rem;
+  color: var(--ink-soft);
+}
+
+.handle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.handle {
+  letter-spacing: 0.04em;
+}
+
+.handle[data-censored='yes'] {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 0 0.25rem;
+}
+
 .admin-row__reasons {
   font-size: 0.72rem;
   text-transform: uppercase;

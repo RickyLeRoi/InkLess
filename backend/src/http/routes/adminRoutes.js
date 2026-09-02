@@ -1,8 +1,12 @@
 // backend/src/http/routes/adminRoutes.js
 
 import { timingSafeEqual } from 'node:crypto';
-import { MESSAGE_MAX_LENGTH } from '../../domain/text.js';
+import { describeWords } from '../../domain/censor.js';
 import { socketAddress } from '../clientAddress.js';
+
+// A 200-character message cannot hold more words than this; the cap is here so a
+// hostile payload cannot make the server build a set of a million indices.
+const MAX_CENSORED_WORDS = 100;
 
 /**
  * @param {string} a
@@ -89,6 +93,15 @@ export async function adminRoutes(fastify, options) {
           originalText: message.originalText,
           wasCensored: message.wasCensored,
           authorInstagram: message.authorInstagram,
+          // Every word with its own toggle state. Derived here rather than in the
+          // browser so the tokenizer that reads a censorship is the same one that
+          // wrote it — two implementations drifting apart would silently turn
+          // censored rows into hand-edited ones.
+          words: describeWords(message.originalText, message.text),
+          handleCensored: message.handleCensored,
+          // A body the old free-text panel rewrote by hand: no set of censored words
+          // can reproduce it, so the panel warns before the next save recomputes it.
+          handEdited: message.handEdited,
           // Which rules fired, so the queue explains itself instead of just listing.
           moderationReasons: message.moderationReasons,
           // A rejected author who asked for a second reading: the one thing in this
@@ -144,9 +157,16 @@ export async function adminRoutes(fastify, options) {
           minProperties: 1,
           additionalProperties: false,
           properties: {
-            text: { type: 'string', minLength: 1, maxLength: MESSAGE_MAX_LENGTH },
-            // An empty string anonymises the author back to a Doe number.
-            authorInstagram: { type: 'string', maxLength: 31 },
+            // 20260903 ** RG #censor_instead_of_rewrite
+            // The full set of blacked-out words, not a delta: the body is recomputed
+            // from the verbatim submission on every call. No free text reaches this
+            // route any more, so the panel cannot publish words nobody wrote.
+            censoredWords: {
+              type: 'array',
+              items: { type: 'integer', minimum: 0 },
+              maxItems: MAX_CENSORED_WORDS
+            },
+            censorHandle: { type: 'boolean' },
             // No default: AJV would insert it and satisfy minProperties, letting an
             // empty patch through as a no-op that reports success.
             approve: { type: 'boolean' }
@@ -156,18 +176,14 @@ export async function adminRoutes(fastify, options) {
     },
     async (request) => {
       const { id } = /** @type {{ id: string }} */ (request.params);
-      const body = /** @type {{ text?: string, authorInstagram?: string, approve?: boolean }} */ (
-        request.body
-      );
+      const body =
+        /** @type {{ censoredWords?: number[], censorHandle?: boolean, approve?: boolean }} */ (
+          request.body
+        );
 
       const message = await moderateMessage.censor(id, {
-        text: body.text,
-        authorInstagram:
-          body.authorInstagram === undefined
-            ? undefined
-            : body.authorInstagram.trim() === ''
-              ? null
-              : body.authorInstagram,
+        censoredWords: body.censoredWords,
+        censorHandle: body.censorHandle,
         approve: body.approve
       });
 
@@ -175,7 +191,8 @@ export async function adminRoutes(fastify, options) {
         id: message.id,
         status: message.status,
         text: message.text,
-        author: message.author
+        author: message.author,
+        handleCensored: message.handleCensored
       };
     }
   );

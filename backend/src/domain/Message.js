@@ -1,6 +1,7 @@
 // backend/src/domain/Message.js
 
 import { randomUUID } from 'node:crypto';
+import { applyCensorship, maskWord, normalizeWordIndices, readCensorship } from './censor.js';
 import { IllegalTransitionError, ValidationError } from './errors.js';
 import { formatAuthor } from './identity.js';
 import { normalizeInstagramHandle, normalizeMessageText } from './text.js';
@@ -42,6 +43,7 @@ export class Message {
    * @param {Date} state.createdAt
    * @param {Date | null} [state.llmReviewedAt]
    * @param {string[]} [state.moderationReasons]
+   * @param {boolean} [state.handleCensored]
    */
   constructor(state) {
     this.id = state.id;
@@ -55,6 +57,7 @@ export class Message {
     this.llmReviewedAt = state.llmReviewedAt ?? null;
     /** @type {string[]} */
     this.moderationReasons = state.moderationReasons ?? [];
+    this.handleCensored = state.handleCensored ?? false;
   }
 
   /**
@@ -99,10 +102,15 @@ export class Message {
 
   /** @returns {string} */
   get author() {
-    return formatAuthor({
+    const label = formatAuthor({
       instagramHandle: this.authorInstagram,
       anonymousSequence: this.authorSequence
     });
+    if (!this.handleCensored) return label;
+
+    // The "@" is punctuation, not part of the name: masking it would eat the one
+    // character that says this is an Instagram handle at all.
+    return label.startsWith('@') ? `@${maskWord(label.slice(1))}` : maskWord(label);
   }
 
   /** @returns {boolean} */
@@ -175,44 +183,48 @@ export class Message {
   }
 
   /**
-   * Replaces the published text while keeping the submission verbatim for audit.
+   * 20260903 ** RG #censor_instead_of_rewrite
+   * Blacks out whole words of the submission. The published text is recomputed from
+   * the verbatim original every time, so lifting a censorship is passing the same set
+   * without that index — there is no un-censor operation to get wrong, and the admin
+   * has no way to make the message say something the author did not write.
    *
-   * @param {unknown} replacement
+   * A rejected message may be censored: the appeal path is reject → black out the word
+   * → publish, and until it is approved nothing of it is on the board anyway.
+   *
+   * @param {unknown} indices
    */
-  censor(replacement) {
-    if (this.status === MessageStatus.REJECTED) {
-      throw new IllegalTransitionError(this.status, 'censored');
-    }
-    this.text = normalizeMessageText(replacement);
+  censorWords(indices) {
+    this.text = applyCensorship(this.originalText, normalizeWordIndices(indices));
+  }
+
+  /** @returns {number[]} the words currently blacked out */
+  get censoredWords() {
+    return readCensorship(this.originalText, this.text) ?? [];
   }
 
   /**
-   * Replaces the author's handle, or strips it back to a generated identity.
+   * A body the old free-text panel rewrote by hand, which no set of censored words can
+   * reproduce. Flagged rather than migrated: the next save recomputes it from the
+   * original, and the admin is told before it happens.
    *
-   * The admin can edit the name as well as the body: a handle that trips the filter
-   * is often fixable rather than fatal, and blanking it must still leave the message
-   * with exactly one identity.
-   *
-   * @param {string | null} handle already normalised, or null to anonymise
-   * @param {number | null} [anonymousSequence] required when anonymising
+   * @returns {boolean}
    */
-  censorHandle(handle, anonymousSequence = null) {
-    if (this.status === MessageStatus.REJECTED) {
-      throw new IllegalTransitionError(this.status, 'censored');
-    }
+  get handEdited() {
+    return readCensorship(this.originalText, this.text) === null;
+  }
 
-    if (handle) {
-      this.authorInstagram = handle;
-      this.authorSequence = null;
-      return;
-    }
-
-    const sequence = anonymousSequence ?? this.authorSequence;
-    if (sequence === null) {
-      throw new ValidationError('Anonymising a handle needs an anonymous sequence');
-    }
-    this.authorInstagram = null;
-    this.authorSequence = sequence;
+  /**
+   * 20260903 ** RG #handle_censor_only
+   * The handle can be blacked out but no longer edited or blanked. It is the author's
+   * own name: an admin rewriting it would be publishing an attribution nobody chose,
+   * and blanking it used to burn a fresh Doe#NNN on every pass. The verbatim value
+   * stays in the row, so the toggle goes both ways.
+   *
+   * @param {boolean} censored
+   */
+  setHandleCensored(censored) {
+    this.handleCensored = Boolean(censored);
   }
 
   /**

@@ -1,7 +1,6 @@
 // backend/src/application/ModerateMessage.js
 
 import { NotFoundError } from '../domain/errors.js';
-import { normalizeInstagramHandle } from '../domain/text.js';
 
 export class ModerateMessage {
   /**
@@ -39,27 +38,30 @@ export class ModerateMessage {
   }
 
   /**
-   * Edits the published body, the author handle, or both.
+   * Blacks out words of the body, the author's handle, or both, and optionally
+   * publishes in the same move.
+   *
+   * The caller sends the complete set of censored words every time rather than a
+   * delta, so the call is idempotent and lifting a censorship needs no operation of
+   * its own. Censorship runs before the approval: the appeal path is reject → black
+   * out → publish, and doing it the other way round would put the message on the
+   * board in the clear for as long as the two calls are apart.
    *
    * @param {string} id
    * @param {object} changes
-   * @param {unknown} [changes.text]
-   * @param {string | null} [changes.authorInstagram] null anonymises the author
+   * @param {number[]} [changes.censoredWords] the full set, not a delta
+   * @param {boolean} [changes.censorHandle]
    * @param {boolean} [changes.approve] publish it in the same move
    */
   async censor(id, changes) {
     const message = await this.#load(id);
 
-    if (changes.text !== undefined) {
-      message.censor(changes.text);
+    if (changes.censoredWords !== undefined) {
+      message.censorWords(changes.censoredWords);
     }
 
-    if (changes.authorInstagram !== undefined) {
-      const handle = normalizeInstagramHandle(changes.authorInstagram);
-      // Blanking the handle still has to leave an identity behind, so a fresh Doe
-      // number is drawn rather than leaving the row with neither.
-      const sequence = handle ? null : await this.messages.nextAnonymousSequence();
-      message.censorHandle(handle, sequence);
+    if (changes.censorHandle !== undefined) {
+      message.setHandleCensored(changes.censorHandle);
     }
 
     if (changes.approve && !message.isPublished) message.approve();
