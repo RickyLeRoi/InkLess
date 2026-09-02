@@ -22,33 +22,25 @@
 # DNS of the whole house and the password manager with it. The numbers are deliberately
 # generous — they are a fence against runaway, not a tuning exercise.
 
-services:
-  # Service names carry the project prefix on purpose: this file is not always the
-  # only compose file on the host, and `backend` is the first name anyone else takes.
-  inkless-backend:
-    # `image` lets `pull` fetch what CI already built; `build` stays for
-    # local iteration (`up -d --build` still works without it).
-    image: ghcr.io/rickyleroi/inkless-backend:latest
+x-inkless: &inkless
     build:
       context: ..
-      dockerfile: docker/backend.Dockerfile
     restart: unless-stopped
-    # NODE_ENV, HOST, PORT and every secret are injected from here, not restated below.
-    env_file: ../.env.homeserver
+    env_file:
+      - path: ./.env.inkless
+        required: true
     volumes:
       - inkless-data:/app/data
     networks:
+      - frontend_net
       - backend_net
-      # Reachable from the hardware node over the LAN, but only on this segment.
       - hw_net
-    ports:
-      # Bound to one interface on purpose: the hardware node needs it, the internet does
-      # not. The default keeps the port on the host until .env says otherwise.
-      - "${BACKEND_BIND_IP:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     security_opt:
       - no-new-privileges:true
     read_only: true
     tmpfs:
+      - /var/cache/nginx
+      - /var/run
       - /tmp
     mem_limit: 512m
     cpus: 1.0
@@ -59,35 +51,26 @@ services:
         max-size: "10m"
         max-file: "3"
 
+services:
+  # Service names carry the project prefix on purpose: this file is not always the
+  # only compose file on the host, and `backend` is the first name anyone else takes.
+  inkless-backend:
+    <<: *inkless
+    container_name: inkless-backend
+    image: ghcr.io/rickyleroi/inkless-backend:latest
+    build:
+      dockerfile: docker/backend.Dockerfile
+    ports:
+      - "${BACKEND_BIND_IP:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+
   inkless-frontend:
+    <<: *inkless
+    container_name: inkless-frontend
     image: ghcr.io/rickyleroi/inkless-frontend:latest
     build:
-      context: ..
       dockerfile: docker/frontend.Dockerfile
-    restart: unless-stopped
-    networks:
-      # Faces the tunnel on one side and the backend on the other. It is the only
-      # container that sits on both.
-      - frontend_net
-      - backend_net
     depends_on:
       - inkless-backend
-    # No `ports`: nothing on the host reaches this, only cloudflared from frontend_net.
-    security_opt:
-      - no-new-privileges:true
-    read_only: true
-    tmpfs:
-      - /var/cache/nginx
-      - /var/run
-      - /tmp
-    mem_limit: 128m
-    cpus: 0.5
-    pids_limit: 128
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   cloudflared:
     # 20260831 ** RG #pin_third_party_images
