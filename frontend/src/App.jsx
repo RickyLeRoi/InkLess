@@ -38,21 +38,22 @@ export function App() {
       {path === '' ? (
         <>
           <p className="intro">
-            Scrivi un messaggio, massimo 200 caratteri. Se passa la moderazione finisce sulla
-            bacheca digitale. Da lì chiunque, con una piccola donazione, può farlo uscire davvero
-            da una stampante termica a casa mia — e con un euro si porta a casa pure il video.
+            InkLess è una bacheca a metà fra il digitale e la carta. Scrivi un messaggio, massimo
+            200 caratteri: se supera la moderazione compare qui sotto, in bacheca. Da quel momento
+            chiunque può farlo uscire davvero da una stampante termica a casa mia con una piccola
+            donazione — da 50 centesimi lo stampo, da un euro ti mando anche il video della stampa.
           </p>
 
-          <Carousel onPrint={setPrinting} reloadToken={reloadToken} />
+          <SubmitForm onSubmitted={refresh} />
+          <MyMessages reloadToken={reloadToken} />
 
-          <div className="columns">
-            <SubmitForm onSubmitted={refresh} />
-            <MyMessages reloadToken={reloadToken} />
-          </div>
+          <Carousel onPrint={setPrinting} reloadToken={reloadToken} />
         </>
       ) : null}
 
-      {path === 'bacheca' ? <Board onPrint={setPrinting} reloadToken={reloadToken} /> : null}
+      {path === 'bacheca' ? (
+        <Board onPrint={setPrinting} reloadToken={reloadToken} focusId={params[0]} />
+      ) : null}
 
       {path === 'job' ? <JobPage jobId={params[0]} /> : null}
 

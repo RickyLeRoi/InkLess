@@ -2,20 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { adminFetch, isAdmin } from '../adminSession.js';
-import { fetchBoard } from '../api.js';
+import { fetchBoard, fetchMessage } from '../api.js';
 import { Receipt } from './Receipt.jsx';
 
 const PAGE_SIZE = 12;
 const DEBOUNCE_MS = 300;
 
 /**
- * @param {{ onPrint: (message: any) => void, reloadToken?: number }} props
+ * @param {{ onPrint: (message: any) => void, reloadToken?: number, focusId?: string }} props
  */
-export function Board({ onPrint, reloadToken = 0 }) {
+export function Board({ onPrint, reloadToken = 0, focusId }) {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(0);
   const [state, setState] = useState({ items: [], total: 0, loading: true, error: '' });
+  const [focus, setFocus] = useState(/** @type {{ message: any, missing: boolean }} */ ({
+    message: null,
+    missing: false
+  }));
   const [localReload, setLocalReload] = useState(0);
   const admin = isAdmin();
 
@@ -31,6 +35,29 @@ export function Board({ onPrint, reloadToken = 0 }) {
       setState((current) => ({ ...current, error: error.message }));
     }
   }
+
+  // 20260902 ++ RG #deep_link_focus
+  // A shared link names one message, and that message can sit on any page of the
+  // board. Fetching it on its own is the only way it is guaranteed to be there.
+  useEffect(() => {
+    if (!focusId) {
+      setFocus({ message: null, missing: false });
+      return;
+    }
+
+    let cancelled = false;
+    fetchMessage(focusId)
+      .then((message) => {
+        if (!cancelled) setFocus({ message, missing: false });
+      })
+      .catch(() => {
+        if (!cancelled) setFocus({ message: null, missing: true });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusId, reloadToken, localReload]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -61,8 +88,35 @@ export function Board({ onPrint, reloadToken = 0 }) {
 
   const lastPage = Math.max(0, Math.ceil(state.total / PAGE_SIZE) - 1);
 
+  // The pinned copy above is the same message: showing it twice reads as a bug.
+  const listed = focus.message
+    ? state.items.filter((message) => message.id !== focus.message.id)
+    : state.items;
+
   return (
     <section>
+      {focus.message ? (
+        <div className="focus">
+          <div className="focus__head">
+            <h2>Messaggio condiviso</h2>
+            <a className="status-pill" href="#/bacheca">
+              Tutta la bacheca
+            </a>
+          </div>
+          <Receipt
+            message={focus.message}
+            onPrint={onPrint}
+            onTakeDown={admin ? takeDown : undefined}
+          />
+        </div>
+      ) : null}
+
+      {focus.missing ? (
+        <div className="notice" data-tone="error">
+          Questo messaggio non è (più) in bacheca. Qui sotto c'è tutto il resto.
+        </div>
+      ) : null}
+
       <div className="searchbar">
         <input
           type="search"
@@ -87,15 +141,15 @@ export function Board({ onPrint, reloadToken = 0 }) {
         </div>
       ) : null}
 
-      {!state.loading && state.items.length === 0 ? (
+      {!state.loading && listed.length === 0 && !focus.message ? (
         <p className="muted">
           {debounced ? 'Nessun messaggio corrisponde alla ricerca.' : 'La bacheca è ancora vuota.'}
         </p>
       ) : null}
 
-      {!state.loading && state.items.length > 0 ? (
+      {!state.loading && listed.length > 0 ? (
         <div className="board">
-          {state.items.map((message) => (
+          {listed.map((message) => (
             <Receipt
               key={message.id}
               message={message}

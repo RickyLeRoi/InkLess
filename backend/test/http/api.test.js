@@ -82,7 +82,40 @@ describe('GET /api/messages', () => {
       method: 'GET',
       url: `/api/messages/status?ids=${created.id},inesistente`
     });
-    assert.deepEqual(response.json().items, [{ id: created.id, status: 'approved' }]);
+    assert.deepEqual(response.json().items, [
+      { id: created.id, status: 'approved', excerpt: 'un messaggio innocuo' }
+    ]);
+  });
+
+  it('shortens the excerpt so a long list stays readable', async () => {
+    const created = (await submit({ text: 'uno due tre quattro cinque sei' })).json();
+    const response = await server.inject({
+      method: 'GET',
+      url: `/api/messages/status?ids=${created.id}`
+    });
+    assert.equal(response.json().items[0].excerpt, 'uno due tre quattro...');
+  });
+});
+
+describe('GET /api/messages/:id', () => {
+  it('serves a single published message for a shared link', async () => {
+    const created = (await submit({ text: 'messaggio linkabile' })).json();
+    const response = await server.inject({ method: 'GET', url: `/api/messages/${created.id}` });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().text, 'messaggio linkabile');
+  });
+
+  it('hides anything the board does not show', async () => {
+    const pending = (await submit({ text: 'chiamami al 333 444 5566' })).json();
+    assert.equal(pending.status, 'pending');
+
+    const response = await server.inject({ method: 'GET', url: `/api/messages/${pending.id}` });
+    assert.equal(response.statusCode, 404);
+  });
+
+  it('answers 404 for an unknown id', async () => {
+    const response = await server.inject({ method: 'GET', url: '/api/messages/inesistente' });
+    assert.equal(response.statusCode, 404);
   });
 });
 

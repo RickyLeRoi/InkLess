@@ -124,17 +124,39 @@ function buildSubstringMatcher(words) {
 /**
  * Builds a matcher for two-token insults, in both orders and with any junk between.
  *
- * @param {readonly string[]} left
- * @param {readonly string[]} right
+ * Both sides arrive as ready-made alternation fragments rather than word lists: the
+ * epithet side carries an inflection pattern that must not be escaped.
+ *
+ * @param {string} left
+ * @param {string} right
  * @returns {RegExp}
  */
 function buildPairMatcher(left, right) {
-  const a = left.map(escapeRegex).join('|');
-  const b = right.map(escapeRegex).join('|');
   return new RegExp(
-    `(?<!\\p{L})(?:(?:${a})${GAP}(?:${b})|(?:${b})${GAP}(?:${a}))(?!\\p{L})`,
+    `(?<!\\p{L})(?:(?:${left})${GAP}(?:${right})|(?:${right})${GAP}(?:${left}))(?!\\p{L})`,
     'iu'
   );
+}
+
+/**
+ * @param {readonly string[]} words
+ * @returns {string}
+ */
+function alternationOf(words) {
+  return words.map(escapeRegex).join('|');
+}
+
+/**
+ * The epithet half of a blasphemy: every stem followed by any of its endings.
+ *
+ * @param {(value: string) => string} [transform] applied to stems and ending alike,
+ *   so the squeezed matcher stays aligned with squeezed text ("porcaccio" arrives as
+ *   "porcacio", and the ending it must meet is "aci[aeio]").
+ * @returns {string}
+ */
+function epithetAlternation(transform = (value) => value) {
+  const ending = transform(BLASPHEMY.epithetEnding);
+  return BLASPHEMY.epithetStems.map((stem) => `${escapeRegex(transform(stem))}${ending}`).join('|');
 }
 
 /**
@@ -175,10 +197,10 @@ export class RegexModerationAdapter {
       profanity: buildMatcherPair(PROFANITY),
       suspicious: buildMatcherPair(SUSPICIOUS)
     };
-    this.blasphemy = buildPairMatcher(BLASPHEMY.deities, BLASPHEMY.epithets);
+    this.blasphemy = buildPairMatcher(alternationOf(BLASPHEMY.deities), epithetAlternation());
     this.blasphemySqueezed = buildPairMatcher(
-      BLASPHEMY.deities.map(squeezeRuns),
-      BLASPHEMY.epithets.map(squeezeRuns)
+      alternationOf(BLASPHEMY.deities.map(squeezeRuns)),
+      epithetAlternation(squeezeRuns)
     );
 
     this.handleMatchers = {
@@ -187,8 +209,8 @@ export class RegexModerationAdapter {
       suspicious: buildSubstringMatcher(SUSPICIOUS)
     };
     this.handleBlasphemy = new RegExp(
-      `(?:${BLASPHEMY.deities.join('|')})(?:${BLASPHEMY.epithets.join('|')})` +
-        `|(?:${BLASPHEMY.epithets.join('|')})(?:${BLASPHEMY.deities.join('|')})`,
+      `(?:${alternationOf(BLASPHEMY.deities)})(?:${epithetAlternation()})` +
+        `|(?:${epithetAlternation()})(?:${alternationOf(BLASPHEMY.deities)})`,
       'iu'
     );
   }

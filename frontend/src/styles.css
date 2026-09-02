@@ -9,6 +9,9 @@
   --danger: #8a2b1f;
   --ok: #2f6b3a;
   --receipt-width: 22rem;
+  /* Every card is as tall as one carrying a QR code, so the board stops looking
+     like a broken staircase. The body scrolls inside whatever is left over. */
+  --receipt-height: 27rem;
   color-scheme: light;
 }
 
@@ -72,7 +75,6 @@ a {
 }
 
 .intro {
-  max-width: 42rem;
   margin-bottom: 2rem;
   color: var(--ink-soft);
 }
@@ -80,8 +82,11 @@ a {
 /* The receipt: torn top and bottom edges cut out of a plain block of paper. */
 .receipt {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: var(--receipt-width);
+  height: var(--receipt-height);
   background: var(--paper);
   padding: 1.25rem 1.1rem 1.5rem;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
@@ -109,11 +114,26 @@ a {
   margin: 0.9rem 0;
 }
 
+/* The one elastic part of the card: it takes the slack on a short message and
+   scrolls on a long one, so the outer height never moves. */
 .receipt__body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 1rem;
   margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.receipt__head,
+.receipt__foot,
+.receipt__rule,
+.receipt__meta,
+.receipt__qr,
+.receipt__actions,
+.receipt__hint {
+  flex: none;
 }
 
 .receipt__meta {
@@ -128,7 +148,6 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.9rem;
 }
 
 .receipt__qr {
@@ -141,6 +160,11 @@ a {
 .receipt__qr span {
   font-size: 0.7rem;
   color: var(--ink-soft);
+}
+
+.receipt__actions {
+  margin-top: auto;
+  padding-top: 0.9rem;
 }
 
 .qr {
@@ -203,6 +227,95 @@ a {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
   gap: 1.75rem;
   align-items: start;
+}
+
+/* The message somebody was actually linked to, pinned above the grid. */
+.focus {
+  margin-bottom: 2.5rem;
+}
+
+.focus__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.focus__head h2 {
+  margin: 0 0 1rem;
+}
+
+.focus__head a {
+  text-decoration: none;
+}
+
+.focus .receipt {
+  outline: 2px solid var(--ink);
+  outline-offset: 6px;
+}
+
+/* "I tuoi messaggi": one entry at a time, dots for the rare prolific author. */
+.mine {
+  margin: 2rem 0 3rem;
+}
+
+.mine__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mine__head h2 {
+  margin: 0 0 0.75rem;
+}
+
+.mine__entry {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 0.6rem 0.8rem;
+  text-decoration: none;
+}
+
+a.mine__entry:hover {
+  border-color: var(--ink);
+}
+
+.mine__excerpt {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mine__go {
+  flex: none;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+}
+
+.mine__dots {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.mine__dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--ink-soft);
+}
+
+.mine__dot[aria-selected='true'] {
+  background: var(--ink);
 }
 
 .searchbar {
@@ -341,16 +454,10 @@ button.danger:hover:not(:disabled) {
   padding: 0.1rem 0.45rem;
 }
 
-.columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--receipt-width));
-  gap: 2.5rem;
-  align-items: start;
-}
-
+/* Narrow screens wrap the action row onto more lines: the card needs the room. */
 @media (max-width: 46rem) {
-  .columns {
-    grid-template-columns: 1fr;
+  :root {
+    --receipt-height: 31rem;
   }
 }
 

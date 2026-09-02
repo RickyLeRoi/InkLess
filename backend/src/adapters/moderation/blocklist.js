@@ -114,29 +114,51 @@ export const HARD_REJECT = Object.freeze([
  */
 const DEITIES = ['dio', 'iddio', 'madonna', 'madonne', 'gesu', 'cristo', 'signore'];
 
-const EPITHETS = [
-  'porco',
-  'porca',
-  'porci',
-  'cane',
-  'cani',
-  'boia',
-  'maiale',
-  'maiala',
-  'ladro',
-  'bestia',
-  'merda',
-  'schifoso',
-  'bastardo',
-  'stronzo',
-  'puttana',
-  'troia',
-  'infame',
-  'serpente',
-  'caro'
+/**
+ * 20260902 ** RG #epithet_inflection
+ * Whole words lost this race: "porcaccio dio" walked past a list holding "porco",
+ * and no amount of run squeezing brings the two together. Italian glues its insults
+ * onto a stem — porco, porcaccio, porcone, porcaccia — so the epithet side is a stem
+ * plus an ending, and the list stops chasing forms.
+ */
+const EPITHET_STEMS = [
+  'porc',
+  'can',
+  'boi',
+  'maial',
+  'ladr',
+  'besti',
+  'merd',
+  'schifos',
+  'bastard',
+  'stronz',
+  'puttan',
+  'troi',
+  'infam',
+  'serpent'
 ];
 
+// 20260902 -- RG
+// "caro" left with the inflection: as a whole word it only paired into "dio caro",
+// which is dismay rather than blasphemy, and as a stem it started binning "la cara
+// madonna di mia nonna". The mildest entry on the list was not worth that.
+
+
+/**
+ * Endings the stems accept: the plain gender/number vowel plus the pejoratives and
+ * augmentatives that carry the insult ("-accio", "-azzo", "-one", "-otto").
+ */
+const EPITHET_ENDING = '(?:[aeio]|acci[aeio]|azz[aeio]|on[aei]|ott[aeio]|astr[aeio]|issim[aeio])';
+
+/**
+ * 20260902 ++ RG #deities_stay_exact
+ * The same trick is deliberately NOT applied to the deities. Stemming "dio" to "di"
+ * would also match "dia" and "die", and "che il cane dia la zampa" would become a
+ * blasphemy. Widening the epithet side is free by comparison: a match still needs a
+ * deity spelled out next to it.
+ */
 export const BLASPHEMY = Object.freeze({
   deities: Object.freeze(DEITIES),
-  epithets: Object.freeze(EPITHETS)
+  epithetStems: Object.freeze(EPITHET_STEMS),
+  epithetEnding: EPITHET_ENDING
 });

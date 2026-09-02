@@ -117,7 +117,12 @@ describe('compositional blasphemy', () => {
     'porcoddio',
     'dio cane',
     'porca madonna',
-    'madonna puttana'
+    'madonna puttana',
+    'porcaccio dio',
+    'dio porcaccio',
+    'porcone dio',
+    'dio maialissimo',
+    'madonna troiaccia'
   ];
 
   for (const text of variants) {
@@ -133,6 +138,18 @@ describe('compositional blasphemy', () => {
   it('leaves the halves alone when they are apart', async () => {
     assert.equal(
       await verdictOf('il porco e nel recinto mentre prego dio'),
+      ModerationVerdict.AUTO_APPROVE
+    );
+  });
+
+  /**
+   * 20260902 ++ RG #epithet_inflection
+   * The inflection tolerance lives on the epithet side only. Stemming the deities
+   * would turn "dio" into "dia" and bin this sentence.
+   */
+  it('leaves an inflected verb next to an epithet alone', async () => {
+    assert.equal(
+      await verdictOf('aspetto che il cane dia la zampa'),
       ModerationVerdict.AUTO_APPROVE
     );
   });

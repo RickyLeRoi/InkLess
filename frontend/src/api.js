@@ -44,6 +44,16 @@ export function fetchBoard(query = {}) {
   return request(`/messages${suffix ? `?${suffix}` : ''}`);
 }
 
+/**
+ * One published message, for a link that points at a single entry instead of the
+ * whole board.
+ *
+ * @param {string} id
+ */
+export function fetchMessage(id) {
+  return request(`/messages/${encodeURIComponent(id)}`);
+}
+
 /** @param {string[]} ids */
 export function fetchStatuses(ids) {
   if (ids.length === 0) return Promise.resolve({ items: [] });

@@ -17,9 +17,41 @@ const OUTCOME_COPY = {
   },
   rejected: {
     tone: 'error',
-    text: 'Questo messaggio non passa il filtro. Riprova con parole diverse.'
+    text: 'Questo messaggio è stato moderato. Riprova con parole diverse.'
   }
 };
+
+/**
+ * 20260902 ++ RG #reason_categories
+ * The category, never the word that tripped the filter: quoting it back turns the
+ * form into an oracle that tells anybody exactly what to disguise. A label is enough
+ * for an honest author to see what happened.
+ *
+ * @type {Record<string, string>}
+ */
+const REASON_COPY = {
+  hate_speech: 'linguaggio d’odio',
+  blasphemy: 'bestemmia',
+  profanity: 'parolacce',
+  link_spam: 'link',
+  oversized: 'messaggio troppo lungo',
+  ambiguous_language: 'linguaggio al limite',
+  contact_details: 'contatti personali',
+  phone_number: 'numero di telefono',
+  character_flood: 'caratteri ripetuti',
+  shouting: 'tutto maiuscolo',
+  handle_hate_speech: 'nome Instagram: linguaggio d’odio',
+  handle_blasphemy: 'nome Instagram: bestemmia',
+  handle_profanity: 'nome Instagram: parolacce',
+  handle_ambiguous: 'nome Instagram: al limite',
+  handle_oversized: 'nome Instagram troppo lungo'
+};
+
+/** @param {string[]} reasons */
+function describeReasons(reasons) {
+  const labels = reasons.map((reason) => REASON_COPY[reason]).filter(Boolean);
+  return labels.length > 0 ? [...new Set(labels)].join(', ') : '';
+}
 
 /** @param {{ onSubmitted: () => void }} props */
 export function SubmitForm({ onSubmitted }) {
@@ -31,6 +63,7 @@ export function SubmitForm({ onSubmitted }) {
 
   const remaining = MAX_LENGTH - text.length;
   const tooLong = remaining < 0;
+  const reasonSummary = outcome ? describeReasons(outcome.moderation?.reasons ?? []) : '';
 
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
@@ -99,6 +132,7 @@ export function SubmitForm({ onSubmitted }) {
       {outcome ? (
         <div className="notice" data-tone={OUTCOME_COPY[outcome.status]?.tone ?? 'neutral'}>
           {OUTCOME_COPY[outcome.status]?.text}
+          {reasonSummary ? <div className="muted">Motivo: {reasonSummary}.</div> : null}
           <div className="muted">Firmato come {outcome.author}</div>
         </div>
       ) : null}

@@ -96,6 +96,13 @@ export async function publicRoutes(fastify, options) {
     }
   );
 
+  // Static '/messages/status' above wins over this one in the router; the deep link
+  // from a shared receipt lands here.
+  fastify.get('/messages/:id', async (request) => {
+    const { id } = /** @type {{ id: string }} */ (request.params);
+    return listBoard.publicMessage(id);
+  });
+
   fastify.post(
     '/messages/:id/print',
     {

@@ -6,10 +6,26 @@ import { shareStoryImage } from '../lib/storyImage.js';
 import { QrCode } from './QrCode.jsx';
 
 const SHARE_TARGETS = [
-  { id: 'threads', label: 'Threads', href: (text, url) => `https://www.threads.net/intent/post?text=${text}%20${url}` },
-  { id: 'x', label: 'X', href: (text, url) => `https://twitter.com/intent/tweet?text=${text}&url=${url}` },
-  { id: 'whatsapp', label: 'WhatsApp', href: (text, url) => `https://wa.me/?text=${text}%20${url}` }
+  {
+    id: 'threads',
+    label: 'Threads',
+    href: (text, url) =>
+      `https://www.threads.net/intent/post?text=${encodeURIComponent(`${text} ${url}`)}`
+  },
+  {
+    id: 'x',
+    label: 'X',
+    href: (text, url) =>
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`
+  },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    href: (text, url) => `https://api.whatsapp.com/send?text=${encodeURIComponent(`${text} ${url}`)}`
+  }
 ];
+
+const canShareNatively = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
 /**
  * @param {{ createdAt: string }} message
@@ -25,6 +41,16 @@ function formatDate(createdAt) {
 }
 
 /**
+ * A link to this exact message rather than to the board: the board is paginated, so
+ * a generic link buries whatever was being shared.
+ *
+ * @param {string} id
+ */
+function permalinkOf(id) {
+  return `${window.location.origin}/#/bacheca/${id}`;
+}
+
+/**
  * @param {{
  *   message: any,
  *   onPrint?: (message: any) => void,
@@ -37,8 +63,8 @@ export function Receipt({ message, onPrint, onTakeDown, footer }) {
 
   const profile = message.authorInstagram ? profileUrl(message.authorInstagram) : null;
 
-  const shareUrl = encodeURIComponent(`${window.location.origin}/#/bacheca`);
-  const shareText = encodeURIComponent(`"${message.text}" — ${message.author} su InkLess`);
+  const shareUrl = permalinkOf(message.id);
+  const shareText = `"${message.text}" — ${message.author} su InkLess`;
 
   async function shareToInstagram() {
     setStory({ busy: true, note: '' });
@@ -54,6 +80,23 @@ export function Receipt({ message, onPrint, onTakeDown, footer }) {
         busy: false,
         note: error.name === 'AbortError' ? '' : "Non sono riuscito a generare l'immagine."
       });
+    }
+  }
+
+  /**
+   * 20260902 ** RG #whatsapp_kept_only_the_url
+   * The native sheet gets text and url glued into a single `text`, with no `url`
+   * field at all. Handed both, WhatsApp keeps the url and throws the message away —
+   * which is why sharing looked right from the desktop links and arrived stripped
+   * from a phone.
+   */
+  async function shareNatively() {
+    try {
+      await navigator.share({ text: `${shareText} ${shareUrl}` });
+      setStory({ busy: false, note: '' });
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      setStory({ busy: false, note: 'Condivisione non riuscita, riprova.' });
     }
   }
 
@@ -85,7 +128,13 @@ export function Receipt({ message, onPrint, onTakeDown, footer }) {
       {profile ? (
         <div className="receipt__qr">
           <QrCode value={profile} label={`Profilo Instagram di ${message.author}`} />
-          <span>Inquadra per aprire {message.author} su Instagram.</span>
+          <span>
+            Inquadra o tocca{' '}
+            <a href={profile} target="_blank" rel="noreferrer noopener">
+              {message.author}
+            </a>{' '}
+            per aprire il profilo Instagram.
+          </span>
         </div>
       ) : null}
 
@@ -101,17 +150,24 @@ export function Receipt({ message, onPrint, onTakeDown, footer }) {
         <button className="ghost" onClick={shareToInstagram} disabled={story.busy}>
           {story.busy ? 'Genero...' : 'Instagram'}
         </button>
-        {SHARE_TARGETS.map((target) => (
-          <a
-            key={target.id}
-            className="status-pill"
-            href={target.href(shareText, shareUrl)}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {target.label}
-          </a>
-        ))}
+
+        {canShareNatively ? (
+          <button className="ghost" onClick={shareNatively}>
+            Condividi
+          </button>
+        ) : (
+          SHARE_TARGETS.map((target) => (
+            <a
+              key={target.id}
+              className="status-pill"
+              href={target.href(shareText, shareUrl)}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              {target.label}
+            </a>
+          ))
+        )}
       </div>
 
       {story.note ? <p className="muted receipt__hint">{story.note}</p> : null}
