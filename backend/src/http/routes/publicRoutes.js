@@ -45,7 +45,8 @@ const printSchema = {
  * @param {any} options
  */
 export async function publicRoutes(fastify, options) {
-  const { config, submitMessage, listBoard, requestPrint, trackPrintJob, jobEvents } = options;
+  const { config, submitMessage, listBoard, moderateMessage, requestPrint, trackPrintJob, jobEvents } =
+    options;
 
   fastify.post(
     '/messages',
@@ -60,12 +61,12 @@ export async function publicRoutes(fastify, options) {
     },
     async (request, reply) => {
       const body = /** @type {{ text: string, authorInstagram?: string }} */ (request.body);
-      const { message, verdict, reasons } = await submitMessage.execute(body);
+      const { message, verdict, reasons, matches } = await submitMessage.execute(body);
       return reply.status(201).send({
         id: message.id,
         status: message.status,
         author: message.author,
-        moderation: { verdict, reasons }
+        moderation: { verdict, reasons, matches }
       });
     }
   );
@@ -102,6 +103,23 @@ export async function publicRoutes(fastify, options) {
     const { id } = /** @type {{ id: string }} */ (request.params);
     return listBoard.publicMessage(id);
   });
+
+  // 20260902 ++ RG #appeal
+  // Same hourly budget as a submission: this is the one route that lets an anonymous
+  // caller put something back in front of the admin, so it gets the same ceiling.
+  fastify.post(
+    '/messages/:id/appeal',
+    {
+      config: {
+        rateLimit: { max: config.rateLimit.submissionsPerHour, timeWindow: '1 hour' }
+      }
+    },
+    async (request) => {
+      const { id } = /** @type {{ id: string }} */ (request.params);
+      const message = await moderateMessage.requestAppeal(id);
+      return { id: message.id, status: message.status, appealed: message.appealRequested };
+    }
+  );
 
   fastify.post(
     '/messages/:id/print',

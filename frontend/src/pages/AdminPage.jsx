@@ -16,7 +16,8 @@ const REASON_LABELS = {
   handle_hate_speech: 'username: odio',
   handle_blasphemy: 'username: bestemmia',
   handle_profanity: 'username: volgarita',
-  handle_ambiguous: 'username: ambiguo'
+  handle_ambiguous: 'username: ambiguo',
+  appeal_requested: 'reclamo'
 };
 
 /** @param {string} reason */
@@ -38,9 +39,12 @@ export function AdminPage() {
 
   const reload = useCallback(() => {
     if (!authed) return;
-    adminFetch(`/messages?status=${status}`)
+    // The appeals view is the rejected list with the ones nobody contested removed:
+    // an appeal is a moderation reason, not a status of its own.
+    const appealsOnly = status === 'appeals';
+    adminFetch(`/messages?status=${appealsOnly ? 'rejected' : status}`)
       .then((data) => {
-        setItems(data.items);
+        setItems(appealsOnly ? data.items.filter(/** @param {any} item */ (item) => item.appealRequested) : data.items);
         setDrafts({});
         setError('');
       })
@@ -152,6 +156,7 @@ export function AdminPage() {
           <option value="pending">In attesa</option>
           <option value="approved">Approvati</option>
           <option value="rejected">Scartati</option>
+          <option value="appeals">Reclami</option>
         </select>
         <button className="ghost" onClick={escalate}>
           Passa il batch al modello

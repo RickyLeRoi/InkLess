@@ -299,6 +299,10 @@ a.mine__entry:hover {
   color: var(--ink-soft);
 }
 
+.mine__appeal {
+  margin-top: 0.6rem;
+}
+
 .mine__dots {
   display: flex;
   gap: 0.4rem;

@@ -26,7 +26,7 @@ export class SubmitMessage {
    * @param {object} input
    * @param {unknown} input.text
    * @param {unknown} [input.authorInstagram]
-   * @returns {Promise<{ message: Message, verdict: string, reasons: string[] }>}
+   * @returns {Promise<{ message: Message, verdict: string, reasons: string[], matches: string[] }>}
    */
   async execute(input) {
     const text = normalizeMessageText(input.text);
@@ -40,7 +40,7 @@ export class SubmitMessage {
     if (authorInstagram) {
       judgements.push(await this.moderation.evaluateHandle(authorInstagram));
     }
-    const { verdict, reasons } = strictestOf(...judgements);
+    const { verdict, reasons, matches } = strictestOf(...judgements);
 
     // The Doe#NNN counter is only burned for submissions that will actually exist,
     // so a rejected spam run does not eat identities.
@@ -59,7 +59,7 @@ export class SubmitMessage {
 
     if (message.status === 'pending') this.#considerEscalation();
 
-    return { message, verdict, reasons };
+    return { message, verdict, reasons, matches: matches ?? [] };
   }
 
   /**

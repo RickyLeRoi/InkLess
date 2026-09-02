@@ -91,6 +91,9 @@ export async function adminRoutes(fastify, options) {
           authorInstagram: message.authorInstagram,
           // Which rules fired, so the queue explains itself instead of just listing.
           moderationReasons: message.moderationReasons,
+          // A rejected author who asked for a second reading: the one thing in this
+          // list that somebody is actually waiting on.
+          appealRequested: message.appealRequested,
           // Tells the admin which rows the model has already given up on, so the
           // queue can be sorted by "actually needs me" rather than by arrival.
           llmReviewed: message.llmReviewedAt !== null,

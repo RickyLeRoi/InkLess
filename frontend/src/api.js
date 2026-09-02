@@ -61,6 +61,15 @@ export function fetchStatuses(ids) {
 }
 
 /**
+ * Asks a human to look again at a rejection.
+ *
+ * @param {string} id
+ */
+export function requestAppeal(id) {
+  return request(`/messages/${encodeURIComponent(id)}/appeal`, { method: 'POST' });
+}
+
+/**
  * @param {string} messageId
  * @param {{ amountCents: number, printerInstagram?: string }} input
  */

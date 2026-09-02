@@ -43,6 +43,23 @@ describe('POST /api/messages', () => {
     assert.equal(response.statusCode, 400);
   });
 
+  /**
+   * 20260902 ** RG #show_the_words
+   * The word we bin, not the disguise it arrived in: "C0GL10NE" comes back as
+   * "coglione". Self-explanatory, and it does not double as a report on which
+   * obfuscations the filter can see through.
+   */
+  it('reports the blocked word behind the disguise', async () => {
+    const response = await submit({ text: 'sei un C0GL10NE' });
+    const body = response.json();
+    assert.equal(body.status, 'rejected');
+    assert.deepEqual(body.moderation.matches, ['coglione']);
+  });
+
+  it('reports nothing when nothing fired', async () => {
+    assert.deepEqual((await submit()).json().moderation.matches, []);
+  });
+
   it('refuses unknown properties', async () => {
     const response = await submit({ text: 'ciao', isAdmin: true });
     assert.equal(response.statusCode, 400);
@@ -83,7 +100,7 @@ describe('GET /api/messages', () => {
       url: `/api/messages/status?ids=${created.id},inesistente`
     });
     assert.deepEqual(response.json().items, [
-      { id: created.id, status: 'approved', excerpt: 'un messaggio innocuo' }
+      { id: created.id, status: 'approved', excerpt: 'un messaggio innocuo', appealed: false }
     ]);
   });
 
@@ -94,6 +111,52 @@ describe('GET /api/messages', () => {
       url: `/api/messages/status?ids=${created.id}`
     });
     assert.equal(response.json().items[0].excerpt, 'uno due tre quattro...');
+  });
+});
+
+describe('POST /api/messages/:id/appeal', () => {
+  it('puts a rejected message back in front of a human', async () => {
+    const rejected = (await submit({ text: 'sei un coglione' })).json();
+    assert.equal(rejected.status, 'rejected');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/messages/${rejected.id}/appeal`
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().appealed, true);
+
+    const queue = await server.inject({
+      method: 'GET',
+      url: '/api/admin/messages?status=rejected',
+      headers: { authorization: ADMIN_AUTH }
+    });
+    const item = queue.json().items.find(/** @param {any} row */ (row) => row.id === rejected.id);
+    assert.equal(item.appealRequested, true);
+  });
+
+  it('does not stack a second appeal on the same message', async () => {
+    const rejected = (await submit({ text: 'sei un coglione' })).json();
+    const url = `/api/messages/${rejected.id}/appeal`;
+
+    await server.inject({ method: 'POST', url });
+    const again = await server.inject({ method: 'POST', url });
+    assert.equal(again.statusCode, 200);
+
+    const status = await server.inject({
+      method: 'GET',
+      url: `/api/messages/status?ids=${rejected.id}`
+    });
+    assert.equal(status.json().items[0].appealed, true);
+  });
+
+  it('refuses an appeal against something that was not rejected', async () => {
+    const approved = (await submit()).json();
+    const response = await server.inject({
+      method: 'POST',
+      url: `/api/messages/${approved.id}/appeal`
+    });
+    assert.equal(response.statusCode, 409);
   });
 });
 

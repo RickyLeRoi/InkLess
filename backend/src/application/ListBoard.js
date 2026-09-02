@@ -72,7 +72,8 @@ export class ListBoard {
       .map((message) => ({
         id: message.id,
         status: message.status,
-        excerpt: excerptOf(message.text)
+        excerpt: excerptOf(message.text),
+        appealed: message.appealRequested
       }));
   }
 }

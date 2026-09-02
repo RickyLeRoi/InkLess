@@ -69,6 +69,18 @@ export class ModerateMessage {
   }
 
   /**
+   * A rejected author asking for a second reading. Public: the caller holds the id
+   * because they submitted the message, which is the only claim anyone has here.
+   *
+   * @param {string} id
+   */
+  async requestAppeal(id) {
+    const message = await this.#load(id);
+    if (message.requestAppeal()) await this.messages.save(message);
+    return message;
+  }
+
+  /**
    * Pulls a published message off the board.
    *
    * 20260831 ++ RG #takedown_not_delete

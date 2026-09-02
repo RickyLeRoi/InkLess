@@ -39,11 +39,10 @@ const HOMOGLYPH_MAP = Object.freeze({
   τ: 't', υ: 'u', χ: 'x', γ: 'y'
 });
 
-const URL_LIKE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|it|io|xyz|ru|top|link)\b)/i;
-const EMAIL_LIKE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/i;
-const EMAIL_LIKE_GLOBAL = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
-const PHONE_LIKE = /(?:\+?\d[\s.-]?){8,}/;
-const CHAR_FLOOD = /(.)\1{5,}/;
+const URL_LIKE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|it|io|xyz|ru|top|link)\b)/gi;
+const EMAIL_LIKE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
+const PHONE_LIKE = /(?:\+?\d[\s.-]?){8,}/g;
+const CHAR_FLOOD = /(.)\1{5,}/g;
 const SHOUTING_MIN_LENGTH = 20;
 const SHOUTING_RATIO = 0.7;
 
@@ -51,6 +50,9 @@ const SHOUTING_RATIO = 0.7;
 const SEPARATOR = '[^\\p{L}\\p{N}]{0,2}';
 /** How much may sit between the two halves of a compositional insult: "porco dio". */
 const GAP = '[^\\p{L}\\p{N}]{0,3}';
+
+/** Enough to show the author what tripped the filter without printing a wall. */
+const MAX_REPORTED_MATCHES = 8;
 
 /**
  * Folds accents and letter/digit substitutions onto the plain spelling, so the
@@ -87,22 +89,88 @@ function squeezeRuns(text) {
   return text.replace(/(.)\1+/gu, '$1');
 }
 
+/**
+ * 20260902 ++ RG #report_the_dictionary_word
+ * What a matcher found, named by the blocklist entry rather than by the characters
+ * on the page: "c4zz0" comes back as "cazzo". The author knows what they wrote — the
+ * useful half of the answer is which word we bin, and the plain spelling says that
+ * without also handing over a map of which disguises the filter can and cannot see.
+ *
+ * @param {Lexicon} lexicon
+ * @param {string} haystack
+ * @returns {string[]}
+ */
+function lexiconHits(lexicon, haystack) {
+  /** @type {string[]} */
+  const found = [];
+
+  for (const match of haystack.matchAll(lexicon.regex)) {
+    // One capture group per entry, so the group that fired names the word.
+    const index = match.slice(1).findIndex((group) => group !== undefined);
+    if (index >= 0) found.push(lexicon.words[index]);
+  }
+  return found;
+}
+
+/**
+ * Patterns with nothing to look up behind them — a link, a phone number, a
+ * compositional blasphemy — report the fragment they matched.
+ *
+ * @param {RegExp} matcher must carry the global flag
+ * @param {string} haystack
+ * @returns {string[]}
+ */
+function phraseHits(matcher, haystack) {
+  return [...haystack.matchAll(matcher)].map((match) => match[0].trim());
+}
+
+/**
+ * The squeezed pass is a fallback, not a second opinion: run on a phrase both passes
+ * match, it reports the same insult with the doubles missing ("porcacio dio"), and
+ * the author gets told off twice in two spellings.
+ *
+ * @param {RegExp} plain
+ * @param {string} folded
+ * @param {RegExp} squeezed
+ * @param {string} squeezedText
+ * @returns {string[]}
+ */
+function phraseHitsOrSqueezed(plain, folded, squeezed, squeezedText) {
+  const hits = phraseHits(plain, folded);
+  return hits.length > 0 ? hits : phraseHits(squeezed, squeezedText);
+}
+
+/** @param {string[]} values */
+function unique(values) {
+  return [...new Set(values.filter(Boolean))].slice(0, MAX_REPORTED_MATCHES);
+}
+
 /** @param {string} word */
 function escapeRegex(word) {
   return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
+ * A blocklist compiled into one matcher, plus the entries it can report.
+ *
+ * @typedef {{ regex: RegExp, words: readonly string[] }} Lexicon
+ */
+
+/**
  * Builds a word-bounded matcher that tolerates separators between letters.
  *
- * @param {readonly string[]} words
- * @returns {RegExp}
+ * @param {readonly string[]} patterns spellings to look for
+ * @param {readonly string[]} [reported] what to call them, index by index; defaults
+ *   to the patterns themselves. The squeezed matcher searches for "cazo" and still
+ *   reports "cazzo".
+ * @returns {Lexicon}
  */
-function buildWordMatcher(words) {
-  const alternatives = words.map((word) =>
-    [...escapeRegex(word)].join(SEPARATOR)
-  );
-  return new RegExp(`(?<!\\p{L})(?:${alternatives.join('|')})(?!\\p{L})`, 'iu');
+function buildWordMatcher(patterns, reported = patterns) {
+  const alternatives = patterns.map((word) => `(${[...escapeRegex(word)].join(SEPARATOR)})`);
+  return {
+    regex: new RegExp(`(?<!\\p{L})(?:${alternatives.join('|')})(?!\\p{L})`, 'giu'),
+    words: reported
+  };
 }
 
 /**
@@ -114,11 +182,11 @@ function buildWordMatcher(words) {
  * worth it, and the harsher verdict here is review, not rejection.
  *
  * @param {readonly string[]} words
- * @returns {RegExp}
+ * @returns {Lexicon}
  */
 function buildSubstringMatcher(words) {
-  const alternatives = words.map((word) => [...escapeRegex(word)].join(SEPARATOR));
-  return new RegExp(`(?:${alternatives.join('|')})`, 'iu');
+  const alternatives = words.map((word) => `(${[...escapeRegex(word)].join(SEPARATOR)})`);
+  return { regex: new RegExp(`(?:${alternatives.join('|')})`, 'giu'), words };
 }
 
 /**
@@ -134,7 +202,7 @@ function buildSubstringMatcher(words) {
 function buildPairMatcher(left, right) {
   return new RegExp(
     `(?<!\\p{L})(?:(?:${left})${GAP}(?:${right})|(?:${right})${GAP}(?:${left}))(?!\\p{L})`,
-    'iu'
+    'giu'
   );
 }
 
@@ -211,7 +279,7 @@ export class RegexModerationAdapter {
     this.handleBlasphemy = new RegExp(
       `(?:${alternationOf(BLASPHEMY.deities)})(?:${epithetAlternation()})` +
         `|(?:${epithetAlternation()})(?:${alternationOf(BLASPHEMY.deities)})`,
-      'iu'
+      'giu'
     );
   }
 
@@ -231,26 +299,42 @@ export class RegexModerationAdapter {
    */
   async evaluateHandle(handle) {
     if (!withinBounds(handle, INSTAGRAM_HANDLE_MAX_LENGTH)) {
-      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['handle_oversized'] };
+      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['handle_oversized'], matches: [] };
     }
 
     const folded = fold(handle);
     const squeezed = squeezeRuns(folded);
 
-    /** @param {RegExp} matcher */
-    const matches = (matcher) => matcher.test(folded) || matcher.test(squeezed);
-
     /** @type {string[]} */
     const reasons = [];
-    if (matches(this.handleMatchers.hate)) reasons.push('handle_hate_speech');
-    if (matches(this.handleBlasphemy)) reasons.push('handle_blasphemy');
-    if (matches(this.handleMatchers.profanity)) reasons.push('handle_profanity');
-    if (matches(this.handleMatchers.suspicious)) reasons.push('handle_ambiguous');
+    /** @type {string[]} */
+    const matches = [];
+
+    /**
+     * @param {string[]} hits
+     * @param {string} reason
+     */
+    const check = (hits, reason) => {
+      if (hits.length === 0) return;
+      reasons.push(reason);
+      matches.push(...hits);
+    };
+
+    /** @param {Lexicon} lexicon */
+    const words = (lexicon) => [...lexiconHits(lexicon, folded), ...lexiconHits(lexicon, squeezed)];
+
+    check(words(this.handleMatchers.hate), 'handle_hate_speech');
+    check(
+      phraseHitsOrSqueezed(this.handleBlasphemy, folded, this.handleBlasphemy, squeezed),
+      'handle_blasphemy'
+    );
+    check(words(this.handleMatchers.profanity), 'handle_profanity');
+    check(words(this.handleMatchers.suspicious), 'handle_ambiguous');
 
     if (reasons.length === 0) {
-      return { verdict: ModerationVerdict.AUTO_APPROVE, reasons: [] };
+      return { verdict: ModerationVerdict.AUTO_APPROVE, reasons: [], matches: [] };
     }
-    return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons };
+    return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons, matches: unique(matches) };
   }
 
   /**
@@ -259,61 +343,89 @@ export class RegexModerationAdapter {
    */
   async evaluate(text) {
     if (!withinBounds(text, MESSAGE_MAX_LENGTH)) {
-      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['oversized'] };
+      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: ['oversized'], matches: [] };
     }
 
     const folded = fold(text);
     const squeezed = squeezeRuns(folded);
 
-    if (hits(this.matchers.hate, folded, squeezed)) {
-      return { verdict: ModerationVerdict.REJECT, reasons: ['hate_speech'] };
+    /** @param {{ plain: Lexicon, squeezed: Lexicon }} pair */
+    const wordHits = (pair) => [
+      ...lexiconHits(pair.plain, folded),
+      ...lexiconHits(pair.squeezed, squeezed)
+    ];
+
+    const hate = wordHits(this.matchers.hate);
+    if (hate.length > 0) {
+      return { verdict: ModerationVerdict.REJECT, reasons: ['hate_speech'], matches: unique(hate) };
     }
-    if (this.blasphemy.test(folded) || this.blasphemySqueezed.test(squeezed)) {
-      return { verdict: ModerationVerdict.REJECT, reasons: ['blasphemy'] };
+
+    // No dictionary entry behind these — the offending pair is the two halves the
+    // author put next to each other, folded back to their plain spelling.
+    const blasphemy = phraseHitsOrSqueezed(this.blasphemy, folded, this.blasphemySqueezed, squeezed);
+    if (blasphemy.length > 0) {
+      return {
+        verdict: ModerationVerdict.REJECT,
+        reasons: ['blasphemy'],
+        matches: unique(blasphemy)
+      };
     }
-    if (hits(this.matchers.profanity, folded, squeezed)) {
-      return { verdict: ModerationVerdict.REJECT, reasons: ['profanity'] };
+
+    const profanity = wordHits(this.matchers.profanity);
+    if (profanity.length > 0) {
+      return {
+        verdict: ModerationVerdict.REJECT,
+        reasons: ['profanity'],
+        matches: unique(profanity)
+      };
     }
 
     // 20260830 ** RG #email_misread_as_link
     // The domain half of an address matches URL_LIKE, so emails are masked out first:
     // leaving a contact detail for a human to judge beats auto-rejecting it as spam.
-    const withoutEmails = text.replace(EMAIL_LIKE_GLOBAL, ' ');
-    if (URL_LIKE.test(withoutEmails)) {
-      return { verdict: ModerationVerdict.REJECT, reasons: ['link_spam'] };
+    const withoutEmails = text.replace(EMAIL_LIKE, ' ');
+    const links = phraseHits(URL_LIKE, withoutEmails);
+    if (links.length > 0) {
+      return { verdict: ModerationVerdict.REJECT, reasons: ['link_spam'], matches: unique(links) };
     }
 
     /** @type {string[]} */
     const doubts = [];
-    if (hits(this.matchers.suspicious, folded, squeezed)) doubts.push('ambiguous_language');
-    if (EMAIL_LIKE.test(text)) doubts.push('contact_details');
-    if (PHONE_LIKE.test(text)) doubts.push('phone_number');
-    if (CHAR_FLOOD.test(text)) doubts.push('character_flood');
+    /** @type {string[]} */
+    const matches = [];
+
+    /**
+     * @param {string[]} hits
+     * @param {string} reason
+     */
+    const suspect = (hits, reason) => {
+      if (hits.length === 0) return;
+      doubts.push(reason);
+      matches.push(...hits);
+    };
+
+    suspect(wordHits(this.matchers.suspicious), 'ambiguous_language');
+    suspect(phraseHits(EMAIL_LIKE, text), 'contact_details');
+    suspect(phraseHits(PHONE_LIKE, text), 'phone_number');
+    suspect(phraseHits(CHAR_FLOOD, text), 'character_flood');
     if (isShouting(text)) doubts.push('shouting');
 
     if (doubts.length > 0) {
-      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: doubts };
+      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: doubts, matches: unique(matches) };
     }
-    return { verdict: ModerationVerdict.AUTO_APPROVE, reasons: [] };
+    return { verdict: ModerationVerdict.AUTO_APPROVE, reasons: [], matches: [] };
   }
 }
 
 /**
  * @param {readonly string[]} words
- * @returns {{ plain: RegExp, squeezed: RegExp }}
+ * @returns {{ plain: Lexicon, squeezed: Lexicon }}
  */
 function buildMatcherPair(words) {
+  // The squeezed alternation is not deduplicated: its entries have to line up with
+  // the plain list index for index, or a match would report the wrong word.
   return {
     plain: buildWordMatcher(words),
-    squeezed: buildWordMatcher([...new Set(words.map(squeezeRuns))])
+    squeezed: buildWordMatcher(words.map(squeezeRuns), words)
   };
-}
-
-/**
- * @param {{ plain: RegExp, squeezed: RegExp }} matcher
- * @param {string} folded
- * @param {string} squeezed
- */
-function hits(matcher, folded, squeezed) {
-  return matcher.plain.test(folded) || matcher.squeezed.test(squeezed);
 }

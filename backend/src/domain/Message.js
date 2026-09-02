@@ -13,6 +13,15 @@ export const MessageStatus = Object.freeze({
 
 /** @typedef {'pending' | 'approved' | 'rejected'} MessageStatusValue */
 
+/**
+ * 20260902 ++ RG #appeal
+ * An appeal is a moderation reason rather than a status of its own: the filter is
+ * deliberately blunt, so a rejected author needs a way to reach a human, but nothing
+ * about the message changes until that human decides. The admin already has the
+ * rejected → approved move.
+ */
+export const APPEAL_REASON = 'appeal_requested';
+
 /** @type {Readonly<Record<string, MessageStatusValue[]>>} */
 const ALLOWED_TRANSITIONS = Object.freeze({
   pending: [MessageStatus.APPROVED, MessageStatus.REJECTED],
@@ -94,6 +103,27 @@ export class Message {
       instagramHandle: this.authorInstagram,
       anonymousSequence: this.authorSequence
     });
+  }
+
+  /** @returns {boolean} */
+  get appealRequested() {
+    return this.moderationReasons.includes(APPEAL_REASON);
+  }
+
+  /**
+   * Asks for a human to look again at a rejection.
+   *
+   * @returns {boolean} false when an appeal is already on record, so a double tap or
+   *   a retried request cannot stack them
+   */
+  requestAppeal() {
+    if (this.status !== MessageStatus.REJECTED) {
+      throw new IllegalTransitionError(this.status, 'appealed');
+    }
+    if (this.appealRequested) return false;
+
+    this.moderationReasons = [...this.moderationReasons, APPEAL_REASON];
+    return true;
   }
 
   /** @returns {boolean} */

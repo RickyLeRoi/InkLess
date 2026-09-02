@@ -155,6 +155,30 @@ describe('compositional blasphemy', () => {
   });
 });
 
+describe('what gets reported back to the author', () => {
+  it('names the dictionary word, not the spelling it arrived in', async () => {
+    assert.deepEqual((await moderation.evaluate('sei un c0gl10ne')).matches, ['coglione']);
+    assert.deepEqual((await moderation.evaluate('caaaazzzo')).matches, ['cazzo']);
+    assert.deepEqual((await moderation.evaluate('sei un tеrrone')).matches, ['terrone']);
+  });
+
+  it('reports a compositional blasphemy once, not in two spellings', async () => {
+    assert.deepEqual((await moderation.evaluate('che porcaccio dio')).matches, ['porcaccio dio']);
+    assert.deepEqual((await moderation.evaluate('p0rc0dd10')).matches, ['porcodio']);
+  });
+
+  it('reports the offending fragment when there is no word behind it', async () => {
+    assert.deepEqual((await moderation.evaluate('scrivimi su spam.xyz')).matches, ['spam.xyz']);
+    assert.deepEqual((await moderation.evaluate('chiamami al 333 444 5566')).matches, [
+      '333 444 5566'
+    ]);
+  });
+
+  it('reports nothing on a clean message', async () => {
+    assert.deepEqual((await moderation.evaluate('buon compleanno nonna')).matches, []);
+  });
+});
+
 describe('hate speech', () => {
   it('rejects a slur without appeal', async () => {
     const result = await moderation.evaluate('sei proprio un terrone');

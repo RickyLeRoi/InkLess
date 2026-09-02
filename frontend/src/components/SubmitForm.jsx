@@ -22,35 +22,16 @@ const OUTCOME_COPY = {
 };
 
 /**
- * 20260902 ++ RG #reason_categories
- * The category, never the word that tripped the filter: quoting it back turns the
- * form into an oracle that tells anybody exactly what to disguise. A label is enough
- * for an honest author to see what happened.
+ * 20260902 ** RG #show_the_words
+ * The words the filter binned, in their dictionary spelling: "c4zz0" comes back as
+ * "cazzo". The category was more discreet but left an honest author guessing at
+ * which of their 200 characters was the problem, and the plain word explains itself
+ * without also reporting which disguises got through the folding.
  *
- * @type {Record<string, string>}
+ * @param {string[]} matches
  */
-const REASON_COPY = {
-  hate_speech: 'linguaggio d’odio',
-  blasphemy: 'bestemmia',
-  profanity: 'parolacce',
-  link_spam: 'link',
-  oversized: 'messaggio troppo lungo',
-  ambiguous_language: 'linguaggio al limite',
-  contact_details: 'contatti personali',
-  phone_number: 'numero di telefono',
-  character_flood: 'caratteri ripetuti',
-  shouting: 'tutto maiuscolo',
-  handle_hate_speech: 'nome Instagram: linguaggio d’odio',
-  handle_blasphemy: 'nome Instagram: bestemmia',
-  handle_profanity: 'nome Instagram: parolacce',
-  handle_ambiguous: 'nome Instagram: al limite',
-  handle_oversized: 'nome Instagram troppo lungo'
-};
-
-/** @param {string[]} reasons */
-function describeReasons(reasons) {
-  const labels = reasons.map((reason) => REASON_COPY[reason]).filter(Boolean);
-  return labels.length > 0 ? [...new Set(labels)].join(', ') : '';
+function quoteMatches(matches) {
+  return matches.map((match) => `“${match}”`).join(', ');
 }
 
 /** @param {{ onSubmitted: () => void }} props */
@@ -63,7 +44,7 @@ export function SubmitForm({ onSubmitted }) {
 
   const remaining = MAX_LENGTH - text.length;
   const tooLong = remaining < 0;
-  const reasonSummary = outcome ? describeReasons(outcome.moderation?.reasons ?? []) : '';
+  const flagged = outcome?.moderation?.matches ?? [];
 
   /** @param {import('react').FormEvent} event */
   async function handleSubmit(event) {
@@ -132,7 +113,9 @@ export function SubmitForm({ onSubmitted }) {
       {outcome ? (
         <div className="notice" data-tone={OUTCOME_COPY[outcome.status]?.tone ?? 'neutral'}>
           {OUTCOME_COPY[outcome.status]?.text}
-          {reasonSummary ? <div className="muted">Motivo: {reasonSummary}.</div> : null}
+          {flagged.length > 0 ? (
+            <div className="muted">Segnalato: {quoteMatches(flagged)}.</div>
+          ) : null}
           <div className="muted">Firmato come {outcome.author}</div>
         </div>
       ) : null}
