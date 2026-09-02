@@ -7,10 +7,16 @@ const BASE = import.meta.env.VITE_API_BASE ?? '/api';
  * @param {RequestInit} [options]
  */
 async function request(path, options = {}) {
-  const response = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
-  });
+  // 20260902 ** RG #empty_json_body
+  // Same rule as the admin client: a bodyless POST — the appeal — must not announce a
+  // JSON body it does not carry, or Fastify answers 400 before the route is reached.
+  /** @type {Record<string, string>} */
+  const headers = { ...options.headers };
+  if (options.body !== undefined && options.body !== null) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(`${BASE}${path}`, { ...options, headers });
 
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
 

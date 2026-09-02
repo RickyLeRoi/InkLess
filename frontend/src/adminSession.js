@@ -50,14 +50,17 @@ const BASE = import.meta.env.VITE_API_BASE ?? '/api';
  * @returns {Promise<any>}
  */
 export async function adminFetch(path, options = {}) {
-  const response = await fetch(`${BASE}/admin${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: readAdminAuth(),
-      ...options.headers
-    }
-  });
+  // 20260902 ** RG #empty_json_body
+  // The content type goes on only when a body actually follows. Fastify's JSON parser
+  // rejects an empty payload outright, so declaring it on the bodyless POSTs — approve,
+  // reject, takedown, escalate — turned every one of them into a 400.
+  /** @type {Record<string, string>} */
+  const headers = { Authorization: readAdminAuth(), ...options.headers };
+  if (options.body !== undefined && options.body !== null) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(`${BASE}/admin${path}`, { ...options, headers });
 
   if (response.status === 401) {
     clearAdminAuth();
