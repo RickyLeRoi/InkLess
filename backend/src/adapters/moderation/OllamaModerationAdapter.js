@@ -2,6 +2,7 @@
 
 import {
   REQUEST_TIMEOUT_MS,
+  RESPONSE_SCHEMA,
   SYSTEM_PROMPT,
   describeFailure,
   parseVerdict,
@@ -51,7 +52,12 @@ export class OllamaModerationAdapter {
         body: JSON.stringify({
           model: this.model,
           stream: false,
-          format: 'json',
+          // 20260903 ** RG #schema_over_bare_json
+          // A schema rather than format:'json'. Ollama compiles it into a grammar, so the
+          // reasoning key cannot be skipped or emitted after the verdict. Wants Ollama
+          // 0.5.0 or newer; an older one answers 400 and the batch retries forever, which
+          // the eval script reports as failed calls.
+          format: RESPONSE_SCHEMA,
           options: { temperature: 0 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },

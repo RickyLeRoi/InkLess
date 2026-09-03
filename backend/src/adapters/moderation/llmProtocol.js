@@ -4,25 +4,72 @@ import { ModerationVerdict } from '../../ports/ModerationPort.js';
 
 export const REQUEST_TIMEOUT_MS = 20_000;
 
-export const SYSTEM_PROMPT = `Sei un moderatore di una bacheca pubblica italiana dove si lasciano
-messaggi brevi, spesso affettuosi o goliardici, che verranno stampati su carta.
+/**
+ * 20260903 ** RG #reasoning_before_verdict
+ * The reasoning is generated BEFORE the verdict, and that ordering is the whole point
+ * of this rewrite. With the verdict first, a small model picks it on the strength of
+ * one alarming token and then writes a justification that agrees with itself: that is
+ * how "che bel finocchio che mi hai venduto" came back as a homophobic slur. Made to
+ * spell out the context first, the verdict is sampled with that context already in
+ * the window. Never reorder these two keys.
+ */
+export const SYSTEM_PROMPT = `You are moderating an Italian public message board. Messages are
+short, anonymous, and get printed on paper receipts. Expect dedications, birthday wishes,
+football banter, dialect and friendly insults between people who like each other.
 
-Classifica il messaggio in una sola di queste categorie:
-- "safe": innocuo. Auguri, dediche, battute leggere, sfoghi senza insulti.
-- "unsafe": insulti diretti a una persona, odio verso un gruppo, bestemmie,
-  contenuti sessuali espliciti, minacce, spam commerciale, dati personali altrui.
-- "unsure": qualsiasi cosa su cui hai un dubbio reale.
+Classify the Italian message as "safe", "unsafe" or "unsure".
 
-"unsafe" richiede un bersaglio: qualcuno che viene insultato, minacciato o odiato.
-Una parola volgare da sola non basta.
+RULES
+1. Judge the whole sentence, never a single word. Many Italian words are vulgar in one
+   sentence and ordinary in the next, and the surrounding words decide which.
+2. "unsafe" needs a target: a person or a group being insulted, threatened, sexually
+   harassed or hated. Blasphemy, explicit sex, defamation, someone else's personal data
+   and commercial spam are unsafe too.
+3. Vulgarity with no target is not unsafe. Complaints, exclamations and self-deprecation
+   are safe.
+4. A threat is unsafe even when it contains no vulgar word at all.
+5. Friendly insults are normal here. If you cannot tell banter from an attack, answer
+   "unsure".
+6. "unsure" is the safety valve: a human reads those. Never answer "unsafe" when what you
+   mean is "I am not sure".
 
-Molte parole italiane hanno un doppio senso ("finocchio" e' anche un ortaggio, "figa"
-anche un fico, "checca" anche un nome). Giudica il senso nel contesto della frase, mai
-la parola isolata: se la lettura letterale e' plausibile e la frase non attacca
-nessuno, non e' "unsafe" — al massimo "unsure".
+Write the reasoning FIRST, then the verdict. The reasoning must name the target, or state
+that there is none.
 
-Nel dubbio scegli sempre "unsure": un umano rileggera' il messaggio.
-Rispondi esclusivamente con JSON: {"verdict":"safe|unsafe|unsure","reason":"<max 5 parole>"}`;
+Answer with JSON only: {"reasoning":"<max 15 words, English>","verdict":"safe|unsafe|unsure"}
+
+EXAMPLES
+Message: "il finocchio selvatico rende buonissimo l'arrosto"
+{"reasoning":"Recipe context, fennel is the vegetable. No target.","verdict":"safe"}
+
+Message: "tu e tuo fratello siete due handicappati"
+{"reasoning":"Ableist insult aimed at two specific people.","verdict":"unsafe"}
+
+Message: "sei il mio stronzo preferito"
+{"reasoning":"Vulgar word used affectionately, could be banter or an attack.","verdict":"unsure"}
+
+Message: "so dove lavori e passo a trovarti"
+{"reasoning":"No vulgar word, but intimidates a specific person.","verdict":"unsure"}
+
+Message: "grazie di tutto zia, sei speciale"
+{"reasoning":"Plain dedication, nothing offensive.","verdict":"safe"}`;
+
+/**
+ * The same contract as a JSON Schema, for the runtimes that can constrain decoding to
+ * it. Property order is part of the payload: Ollama compiles this into a grammar in the
+ * order the keys appear, which is what nails the reasoning down in front of the verdict.
+ */
+export const RESPONSE_SCHEMA = Object.freeze({
+  type: 'object',
+  properties: {
+    reasoning: { type: 'string' },
+    verdict: { type: 'string', enum: ['safe', 'unsafe', 'unsure'] }
+  },
+  required: ['reasoning', 'verdict']
+});
+
+/** Enough of the model's reasoning to be worth reading in the admin panel. */
+const REASON_MAX_LENGTH = 80;
 
 /**
  * 20260831 ++ RG #llm_verdict_mapping
@@ -49,6 +96,23 @@ export function undecided(why) {
 }
 
 /**
+ * 20260903 ** RG #reasoning_before_verdict
+ * "reason" is still read as a fallback: the endpoint behind the OpenAI adapter is a
+ * gateway that rotates between providers and models, and one answering in the old shape
+ * is worth a verdict rather than a retry loop.
+ *
+ * @param {any} parsed
+ * @returns {string}
+ */
+function readReason(parsed) {
+  for (const key of ['reasoning', 'reason']) {
+    const value = parsed?.[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim().slice(0, REASON_MAX_LENGTH);
+  }
+  return 'llm';
+}
+
+/**
  * Turns whatever the model wrote into a verdict.
  *
  * @param {unknown} content
@@ -67,8 +131,7 @@ export function parseVerdict(content) {
   const verdict = VERDICT_MAP[String(parsed?.verdict).toLowerCase()];
   if (!verdict) return undecided('unknown_verdict');
 
-  const reason = typeof parsed?.reason === 'string' ? parsed.reason.slice(0, 40) : 'llm';
-  return { verdict, reasons: [`llm:${reason}`] };
+  return { verdict, reasons: [`llm:${readReason(parsed)}`] };
 }
 
 /**

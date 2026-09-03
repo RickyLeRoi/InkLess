@@ -62,6 +62,11 @@ export class OpenAiModerationAdapter {
         body: JSON.stringify({
           model: this.model,
           temperature: 0,
+          // 20260903 ** RG #json_object_is_the_common_denominator
+          // Deliberately not json_schema: this base URL is a gateway that rotates between
+          // cloud providers and a local Ollama, so the strictest thing every one of them
+          // accepts is a plain JSON object. The key order is held by the few-shot examples
+          // in the prompt instead of by a grammar.
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },

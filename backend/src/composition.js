@@ -101,7 +101,7 @@ function createPaymentAdapter(config) {
  * @param {any} config
  * @returns {import('./ports/ModerationPort.js').LlmModerationPort}
  */
-function createLlmAdapter(config) {
+export function createLlmAdapter(config) {
   const { llmProvider, llmBaseUrl, llmApiKey, llmModel } = config.moderation;
 
   if (llmProvider === 'ollama') {
