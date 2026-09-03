@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { createDatabase } from '../../src/adapters/persistence/database.js';
 import { SqliteMessageRepository } from '../../src/adapters/persistence/SqliteMessageRepository.js';
+import { RegexModerationAdapter } from '../../src/adapters/moderation/RegexModerationAdapter.js';
 import { EscalateModeration } from '../../src/application/EscalateModeration.js';
 import { Message } from '../../src/domain/Message.js';
 import { ModerationVerdict } from '../../src/ports/ModerationPort.js';
@@ -18,15 +19,20 @@ class ScriptedLlm {
     this.decide = decide;
     this.available = available;
     this.seen = /** @type {string[]} */ ([]);
+    this.contexts = /** @type {any[]} */ ([]);
   }
 
   async isAvailable() {
     return this.available;
   }
 
-  /** @param {string} text */
-  async evaluate(text) {
+  /**
+   * @param {string} text
+   * @param {{ reasons?: string[], matches?: string[] }} [context]
+   */
+  async evaluate(text, context) {
     this.seen.push(text);
+    this.contexts.push(context ?? { reasons: [], matches: [] });
     return this.decide(text);
   }
 }
@@ -63,7 +69,24 @@ async function seedPending(count, prefix = 'messaggio') {
  * @param {number} [threshold]
  */
 function escalationFor(llm, threshold = 3) {
-  return new EscalateModeration({ messages: repository, llm, threshold, batchSize: 100 });
+  return new EscalateModeration({
+    messages: repository,
+    moderation: new RegexModerationAdapter(),
+    llm,
+    threshold,
+    batchSize: 100
+  });
+}
+
+/**
+ * @param {string} text
+ * @param {'pending' | 'approved'} status
+ */
+async function seedOne(text, status = 'pending') {
+  const message = Message.submit({ text, anonymousSequence: 99 });
+  if (status === 'approved') message.approve();
+  await repository.save(message);
+  return message;
 }
 
 describe('threshold', () => {
@@ -209,6 +232,105 @@ describe('concurrency', () => {
 
     release(undefined);
     const outcome = await first;
+    assert.equal(outcome.examined, 3);
+  });
+});
+
+describe('what the model is allowed to do', () => {
+  /**
+   * The regex stage parked this one over a word that is a vegetable half the time.
+   * That is a request for a human, and the model does not get to answer it with a bin.
+   */
+  it('cannot bin a message the regex flagged as ambiguous', async () => {
+    const message = await seedOne('che bel finocchio che mi hai venduto');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.REJECT));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.rejected, 0);
+    assert.equal(outcome.keptForHuman, 1);
+    const stored = await repository.findById(message.id);
+    assert.equal(stored?.status, 'pending');
+    assert.ok(stored?.needsHuman);
+  });
+
+  it('still bins a message nothing had flagged', async () => {
+    await seedOne('ti aspetto sotto casa, la paghi cara');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.REJECT));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.rejected, 1);
+  });
+
+  it('clears an ambiguous message when it decides it is harmless', async () => {
+    await seedOne('ho comprato un finocchio e due carote');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.approved, 1);
+  });
+
+  it('points the model at the word the regex caught', async () => {
+    await seedOne('che bel finocchio che mi hai venduto');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.NEEDS_REVIEW));
+
+    await escalationFor(llm).run();
+
+    assert.deepEqual(llm.contexts[0].reasons, ['ambiguous_language']);
+    assert.deepEqual(llm.contexts[0].matches, ['finocchio']);
+  });
+});
+
+describe('the audit of published messages', () => {
+  it('looks at what the regex published on its own', async () => {
+    await seedOne('ti spacco il record, guarda', 'approved');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.examined, 1);
+    // Nothing to approve: it was already on the board.
+    assert.equal(outcome.approved, 0);
+  });
+
+  it('recalls a published message it finds alarming, without rejecting it', async () => {
+    const message = await seedOne('ti aspetto sotto casa, la paghi cara', 'approved');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.REJECT));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.recalled, 1);
+    assert.equal(outcome.rejected, 0);
+
+    const stored = await repository.findById(message.id);
+    assert.equal(stored?.status, 'pending');
+    assert.ok(stored?.moderationReasons.includes('llm_takedown'));
+
+    const board = await repository.findApproved({});
+    assert.equal(board.total, 0);
+  });
+
+  it('leaves a published message alone when it is merely unsure', async () => {
+    const message = await seedOne('buon compleanno nonna', 'approved');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.NEEDS_REVIEW));
+
+    await escalationFor(llm).run();
+
+    const stored = await repository.findById(message.id);
+    assert.equal(stored?.status, 'approved');
+  });
+
+  it('counts published messages towards the threshold', async () => {
+    await seedOne('primo', 'approved');
+    await seedOne('secondo', 'approved');
+    await seedOne('terzo', 'approved');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    const outcome = await escalationFor(llm).runIfNeeded();
+
+    assert.equal(outcome.ran, true);
     assert.equal(outcome.examined, 3);
   });
 });

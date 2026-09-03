@@ -26,7 +26,11 @@ export const APPEAL_REASON = 'appeal_requested';
 /** @type {Readonly<Record<string, MessageStatusValue[]>>} */
 const ALLOWED_TRANSITIONS = Object.freeze({
   pending: [MessageStatus.APPROVED, MessageStatus.REJECTED],
-  approved: [MessageStatus.REJECTED],
+  // 20260903 ++ RG #llm_takedown_is_a_recall
+  // approved -> pending is the audit pass pulling a published message back for a
+  // human. The board renders approved only, so the recall takes it off the board
+  // without spending the verdict a person has not given yet.
+  approved: [MessageStatus.REJECTED, MessageStatus.PENDING],
   rejected: [MessageStatus.APPROVED]
 });
 
@@ -180,6 +184,15 @@ export class Message {
 
   reject() {
     this.#transitionTo(MessageStatus.REJECTED);
+  }
+
+  /**
+   * Takes a published message off the board and puts it back in front of the admin.
+   * Deliberately not reject(): the model is allowed to interrupt a publication it
+   * finds alarming, never to close it.
+   */
+  recallForReview() {
+    this.#transitionTo(MessageStatus.PENDING);
   }
 
   /**

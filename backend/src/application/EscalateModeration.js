@@ -5,22 +5,39 @@ import { ModerationVerdict } from '../ports/ModerationPort.js';
 const LLM_FAILURE_PREFIX = 'llm_failed:';
 
 /**
- * Hands the pending queue to the model once it has grown past the threshold.
+ * 20260903 ++ RG #llm_cannot_bin_an_ambiguous_message
+ * Reasons that mean "a person decides this one". The regex stage raises them for the
+ * words that are vulgar in one sentence and affectionate in the next, and a message
+ * carrying one is in the queue precisely because no automatic stage should close it —
+ * the model included. It may still clear such a message, which is the whole reason the
+ * batch exists; it just cannot reject it.
+ */
+const HUMAN_ONLY_REASONS = Object.freeze(['ambiguous_language', 'handle_ambiguous']);
+
+/** Says in the admin queue why a published message came back. */
+export const LLM_TAKEDOWN_REASON = 'llm_takedown';
+
+/**
+ * Hands the queue to the model once it has grown past the threshold.
  *
- * The model is slow and the Pi has one of it, so this is deliberately not part of
- * the submission path: a message is judged by the regex stage immediately, and only
- * the accumulated leftovers are escalated in one batch.
+ * The model is slow and there is one of it, so this is deliberately not part of the
+ * submission path: a message is judged by the regex stage immediately, and only the
+ * accumulated leftovers are escalated in one batch.
  */
 export class EscalateModeration {
   /**
    * @param {object} deps
    * @param {import('../ports/MessageRepository.js').MessageRepository} deps.messages
+   * @param {import('../ports/ModerationPort.js').ModerationPort} deps.moderation the
+   *   regex stage, re-run to recover the words it caught: the matches travel with the
+   *   verdict and are never persisted, and they are what the model gets pointed at
    * @param {import('../ports/ModerationPort.js').LlmModerationPort} deps.llm
    * @param {number} deps.threshold queue depth that triggers a run
    * @param {number} deps.batchSize ceiling on one run
    */
-  constructor({ messages, llm, threshold, batchSize }) {
+  constructor({ messages, moderation, llm, threshold, batchSize }) {
     this.messages = messages;
+    this.moderation = moderation;
     this.llm = llm;
     this.threshold = threshold;
     this.batchSize = batchSize;
@@ -53,7 +70,15 @@ export class EscalateModeration {
     // double-send the flag exists to prevent.
     this.running = true;
 
-    const summary = { ran: true, examined: 0, approved: 0, rejected: 0, keptForHuman: 0, retryable: 0 };
+    const summary = {
+      ran: true,
+      examined: 0,
+      approved: 0,
+      rejected: 0,
+      recalled: 0,
+      keptForHuman: 0,
+      retryable: 0
+    };
 
     try {
       if (!(await this.llm.isAvailable())) {
@@ -62,10 +87,11 @@ export class EscalateModeration {
 
       const batch = await this.messages.findAwaitingLlm(this.batchSize);
 
-      // Sequential on purpose: the model runs on the RPi alongside the printer, and
-      // parallel requests there buy latency rather than throughput.
+      // Sequential on purpose: one model serves this box, and parallel requests there
+      // buy latency rather than throughput.
       for (const message of batch) {
-        const result = await this.llm.evaluate(message.text);
+        const context = await this.#contextFor(message);
+        const result = await this.llm.evaluate(message.text, context);
         summary.examined += 1;
 
         if (result.reasons.some((reason) => reason.startsWith(LLM_FAILURE_PREFIX))) {
@@ -75,17 +101,10 @@ export class EscalateModeration {
           continue;
         }
 
-        if (result.verdict === ModerationVerdict.AUTO_APPROVE) {
-          message.approve();
-          summary.approved += 1;
-        } else if (result.verdict === ModerationVerdict.REJECT) {
-          message.reject();
-          summary.rejected += 1;
-        } else {
-          summary.keptForHuman += 1;
-        }
+        const reasons = [...message.moderationReasons, ...result.reasons];
+        this.#applyVerdict(message, result.verdict, context, summary, reasons);
 
-        message.recordModeration([...message.moderationReasons, ...result.reasons]);
+        message.recordModeration(reasons);
         message.markLlmReviewed();
         await this.messages.save(message);
       }
@@ -94,5 +113,65 @@ export class EscalateModeration {
     }
 
     return summary;
+  }
+
+  /**
+   * @param {import('../domain/Message.js').Message} message
+   * @param {import('../ports/ModerationPort.js').ModerationVerdictValue} verdict
+   * @param {{ reasons: string[], matches: string[] }} context
+   * @param {{ approved: number, rejected: number, recalled: number, keptForHuman: number }} summary
+   * @param {string[]} reasons collected so far, appended to when the message is recalled
+   */
+  #applyVerdict(message, verdict, context, summary, reasons) {
+    const published = message.isPublished;
+
+    if (verdict === ModerationVerdict.AUTO_APPROVE) {
+      // Already on the board: the audit pass agreeing with the regex changes nothing
+      // except the reviewed stamp, and approve() on an approved message would throw.
+      if (!published) {
+        message.approve();
+        summary.approved += 1;
+      }
+      return;
+    }
+
+    if (verdict === ModerationVerdict.REJECT) {
+      if (this.#humanOnly(message, context)) {
+        summary.keptForHuman += 1;
+        return;
+      }
+      if (published) {
+        message.recallForReview();
+        reasons.push(LLM_TAKEDOWN_REASON);
+        summary.recalled += 1;
+        return;
+      }
+      message.reject();
+      summary.rejected += 1;
+      return;
+    }
+
+    summary.keptForHuman += 1;
+  }
+
+  /**
+   * @param {import('../domain/Message.js').Message} message
+   * @param {{ reasons: string[] }} context
+   * @returns {boolean}
+   */
+  #humanOnly(message, context) {
+    // Both sets: the fresh pass covers the body under today's lists, the stored one
+    // carries what the handle contributed at submission.
+    const reasons = [...context.reasons, ...message.moderationReasons];
+    return reasons.some((reason) => HUMAN_ONLY_REASONS.includes(reason));
+  }
+
+  /**
+   * @param {import('../domain/Message.js').Message} message
+   * @returns {Promise<{ reasons: string[], matches: string[] }>}
+   */
+  async #contextFor(message) {
+    const result = await this.moderation.evaluate(message.text);
+    return { reasons: result.reasons, matches: result.matches ?? [] };
   }
 }

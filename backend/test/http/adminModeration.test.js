@@ -48,22 +48,22 @@ describe('a handle never rejects on its own', () => {
   });
 
   it('still rejects when the body itself is the problem', async () => {
-    const created = await submit({ text: 'sei un terrone', authorInstagram: '@ricky' });
+    const created = await submit({ text: 'sei un frocio', authorInstagram: '@ricky' });
     assert.equal(created.status, 'rejected');
   });
 
   it('surfaces the reasons to the admin queue', async () => {
-    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilterronedelsud' });
+    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilfrociodelsud' });
 
     const [item] = await queue();
     assert.ok(item.moderationReasons.includes('handle_hate_speech'));
-    assert.equal(item.authorInstagram, 'ilterronedelsud');
+    assert.equal(item.authorInstagram, 'ilfrociodelsud');
   });
 });
 
 describe('the panel censors, it does not rewrite', () => {
   it('blacks out the handle and publishes, keeping the real one on the row', async () => {
-    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilterronedelsud' });
+    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilfrociodelsud' });
     const [item] = await queue();
 
     const response = await server.inject({
@@ -74,19 +74,19 @@ describe('the panel censors, it does not rewrite', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().author, '@i*************d');
+    assert.equal(response.json().author, '@i************d');
 
     const board = await server.inject({ method: 'GET', url: '/api/messages' });
-    assert.equal(board.json().items[0].author, '@i*************d');
+    assert.equal(board.json().items[0].author, '@i************d');
 
     // The verbatim handle stays in the row: it is what the toggle puts back, and the
     // profile link is still the real one.
     const stored = await app.messages.findById(item.id);
-    assert.equal(stored.authorInstagram, 'ilterronedelsud');
+    assert.equal(stored.authorInstagram, 'ilfrociodelsud');
   });
 
   it('puts the handle back when the toggle goes off', async () => {
-    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilterronedelsud' });
+    await submit({ text: 'Ciao a tutti', authorInstagram: '@ilfrociodelsud' });
     const [item] = await queue();
 
     await server.inject({
@@ -102,7 +102,7 @@ describe('the panel censors, it does not rewrite', () => {
       payload: { censorHandle: false }
     });
 
-    assert.equal(response.json().author, '@ilterronedelsud');
+    assert.equal(response.json().author, '@ilfrociodelsud');
   });
 
   it('blacks out body and handle in one call', async () => {
@@ -176,7 +176,7 @@ describe('the panel censors, it does not rewrite', () => {
 
   /** The appeal path: rejected, blacked out, published, in a single call. */
   it('censors and publishes a rejected message', async () => {
-    const created = await submit({ text: 'sei un terrone' });
+    const created = await submit({ text: 'sei un frocio' });
     assert.equal(created.status, 'rejected');
 
     const [item] = await queue('rejected');
@@ -188,7 +188,7 @@ describe('the panel censors, it does not rewrite', () => {
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(response.json().text, 'sei un t*****e');
+    assert.equal(response.json().text, 'sei un f****o');
     assert.equal(response.json().status, 'approved');
   });
 });

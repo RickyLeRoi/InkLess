@@ -2,6 +2,7 @@
 
 import {
   REQUEST_TIMEOUT_MS,
+  buildUserMessage,
   SYSTEM_PROMPT,
   describeFailure,
   parseVerdict,
@@ -50,9 +51,11 @@ export class OpenAiModerationAdapter {
 
   /**
    * @param {string} text
+   * @param {{ reasons?: string[], matches?: string[] }} [context] what the regex stage
+   *   already found, so the model is asked about that word rather than about nothing
    * @returns {Promise<import('../../ports/ModerationPort.js').ModerationResult>}
    */
-  async evaluate(text) {
+  async evaluate(text, context) {
     let payload;
     try {
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -70,7 +73,7 @@ export class OpenAiModerationAdapter {
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: text }
+            { role: 'user', content: buildUserMessage(text, context) }
           ]
         })
       });

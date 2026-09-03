@@ -139,15 +139,19 @@ export class SqliteMessageRepository {
   }
 
   /**
-   * How many pending messages the model has never seen. This is the number the
-   * escalation threshold is compared against.
+   * 20260903 ** RG #audit_the_published_too
+   * Pending *and* approved, both never seen by the model. A message the regex lets
+   * through is published on the spot and, counted the old way, was never shown to the
+   * model at all — which is exactly where the threats carrying no listed word were
+   * hiding. This is the number the escalation threshold is compared against.
    *
    * @returns {Promise<number>}
    */
   async countAwaitingLlm() {
     const row = this.db
       .prepare(
-        "SELECT COUNT(*) AS n FROM messages WHERE status = 'pending' AND llm_reviewed_at IS NULL"
+        `SELECT COUNT(*) AS n FROM messages
+         WHERE status IN ('pending', 'approved') AND llm_reviewed_at IS NULL`
       )
       .get();
     return Number(row?.n ?? 0);
@@ -161,7 +165,7 @@ export class SqliteMessageRepository {
     const rows = this.db
       .prepare(
         `SELECT * FROM messages
-         WHERE status = 'pending' AND llm_reviewed_at IS NULL
+         WHERE status IN ('pending', 'approved') AND llm_reviewed_at IS NULL
          ORDER BY created_at ASC
          LIMIT ?`
       )

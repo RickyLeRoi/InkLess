@@ -40,6 +40,7 @@ export function composeApp(config, overrides = {}) {
 
   const escalation = new EscalateModeration({
     messages,
+    moderation,
     llm,
     threshold: config.moderation.llmThreshold,
     batchSize: config.moderation.llmBatchSize

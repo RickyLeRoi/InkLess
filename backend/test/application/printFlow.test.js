@@ -86,7 +86,7 @@ describe('submission', () => {
 
   it('lets the body decide a rejection even when the handle is clean', async () => {
     const { message, verdict } = await context.submit.execute({
-      text: 'sei un terrone',
+      text: 'sei un frocio',
       authorInstagram: '@ricky'
     });
 
@@ -97,7 +97,7 @@ describe('submission', () => {
   it('keeps the reasons from both halves', async () => {
     const { reasons } = await context.submit.execute({
       text: 'chiamami al 333 444 5566',
-      authorInstagram: '@ilterronedelsud'
+      authorInstagram: '@ilfrociodelsud'
     });
 
     assert.ok(reasons.includes('phone_number'));

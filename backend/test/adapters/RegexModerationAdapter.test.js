@@ -84,7 +84,7 @@ describe('homoglyphs', () => {
   // Cyrillic lookalikes: identical on screen, different code points. Unicode
   // normalisation does not touch them, so they need their own fold.
   it('sees a Cyrillic e inside a slur', async () => {
-    assert.equal(await verdictOf('sei un tеrrone'), ModerationVerdict.REJECT);
+    assert.equal(await verdictOf('sei un frоcio'), ModerationVerdict.REJECT);
   });
 
   it('sees a Cyrillic o and a', async () => {
@@ -159,7 +159,7 @@ describe('what gets reported back to the author', () => {
   it('names the dictionary word, not the spelling it arrived in', async () => {
     assert.deepEqual((await moderation.evaluate('sei un c0gl10ne')).matches, ['coglione']);
     assert.deepEqual((await moderation.evaluate('caaaazzzo')).matches, ['cazzo']);
-    assert.deepEqual((await moderation.evaluate('sei un tеrrone')).matches, ['terrone']);
+    assert.deepEqual((await moderation.evaluate('sei un frоcio')).matches, ['frocio']);
   });
 
   it('reports a compositional blasphemy once, not in two spellings', async () => {
@@ -181,13 +181,18 @@ describe('what gets reported back to the author', () => {
 
 describe('hate speech', () => {
   it('rejects a slur without appeal', async () => {
-    const result = await moderation.evaluate('sei proprio un terrone');
+    const result = await moderation.evaluate('sei proprio un frocio');
     assert.equal(result.verdict, ModerationVerdict.REJECT);
     assert.deepEqual(result.reasons, ['hate_speech']);
   });
 
+  it('catches a truncated dialect blasphemy', async () => {
+    assert.equal(await verdictOf('dio can'), ModerationVerdict.REJECT);
+    assert.equal(await verdictOf('dio porc'), ModerationVerdict.REJECT);
+  });
+
   it('catches an obfuscated slur', async () => {
-    assert.equal(await verdictOf('sei un t3rr0ne'), ModerationVerdict.REJECT);
+    assert.equal(await verdictOf('sei un fr0c10'), ModerationVerdict.REJECT);
   });
 });
 
@@ -228,7 +233,7 @@ describe('handles', () => {
   // A handle has no spaces, so the word sits inside the token and the bounded
   // matcher used for free text would walk straight past it.
   it('finds a slur buried inside the token', async () => {
-    assert.equal(await handleVerdict('ilterronedelsud'), ModerationVerdict.NEEDS_REVIEW);
+    assert.equal(await handleVerdict('ilfrociodelsud'), ModerationVerdict.NEEDS_REVIEW);
   });
 
   it('finds blasphemy written as one word', async () => {
@@ -250,7 +255,7 @@ describe('handles', () => {
    * admin can simply rewrite. So it escalates, never rejects.
    */
   it('never rejects, however bad it looks', async () => {
-    for (const handle of ['ilterronedelsud', 'dioporco90', 'sonouncoglione', 'd10p0rc0']) {
+    for (const handle of ['ilfrociodelsud', 'dioporco90', 'sonouncoglione', 'd10p0rc0']) {
       assert.notEqual(await handleVerdict(handle), ModerationVerdict.REJECT);
     }
   });
@@ -271,10 +276,43 @@ describe('handles', () => {
   });
 });
 
+describe('violence and accusation', () => {
+  it('sends a threat to a human even with no vulgar word in it', async () => {
+    assert.equal(await verdictOf('ti ammazzo di botte'), ModerationVerdict.NEEDS_REVIEW);
+    assert.equal(await verdictOf('ti spacco la faccia'), ModerationVerdict.NEEDS_REVIEW);
+  });
+
+  it('leaves the same verbs alone when nothing is being threatened', async () => {
+    assert.equal(await verdictOf('ammazza che bello'), ModerationVerdict.AUTO_APPROVE);
+    assert.equal(await verdictOf('spacchiamo tutto stasera'), ModerationVerdict.AUTO_APPROVE);
+    assert.equal(await verdictOf('ti spacco il record'), ModerationVerdict.AUTO_APPROVE);
+  });
+
+  /** The pair is ordered: reversed, the same two words are an ordinary sentence. */
+  it('reads an ordered pair in one direction only', async () => {
+    assert.equal(await verdictOf('stanotte ti scopo'), ModerationVerdict.NEEDS_REVIEW);
+    assert.equal(await verdictOf('lo scopo del progetto ti sara chiaro'), ModerationVerdict.AUTO_APPROVE);
+  });
+
+  it('flags an accusation, without deciding it', async () => {
+    assert.equal(await verdictOf('Mario Rossi e un ladro'), ModerationVerdict.NEEDS_REVIEW);
+  });
+});
+
+describe('regional epithets are not moderated any more', () => {
+  it('lets banter through', async () => {
+    for (const text of ['i crucchi ci hanno battuto', 'quei polentoni non capiscono', 'mio cugino terrone']) {
+      assert.equal(await verdictOf(text), ModerationVerdict.AUTO_APPROVE, text);
+    }
+  });
+});
+
 describe('spam and contact details', () => {
-  it('rejects links', async () => {
-    assert.equal(await verdictOf('vieni su https://spam.example'), ModerationVerdict.REJECT);
-    assert.equal(await verdictOf('scrivimi su spam.xyz'), ModerationVerdict.REJECT);
+  it('sends a link to a human instead of binning it', async () => {
+    const result = await moderation.evaluate('scrivimi su spam.xyz');
+    assert.equal(result.verdict, ModerationVerdict.NEEDS_REVIEW);
+    assert.deepEqual(result.reasons, ['link_spam']);
+    assert.equal(await verdictOf('vieni su https://spam.example'), ModerationVerdict.NEEDS_REVIEW);
   });
 
   it('flags an email for a human to look at', async () => {

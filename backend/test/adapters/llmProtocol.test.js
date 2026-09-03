@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import {
   RESPONSE_SCHEMA,
   SYSTEM_PROMPT,
+  buildUserMessage,
   describeFailure,
   parseVerdict
 } from '../../src/adapters/moderation/llmProtocol.js';
@@ -74,5 +75,36 @@ describe('parseVerdict', () => {
     timeout.name = 'TimeoutError';
     assert.deepEqual(describeFailure(timeout).reasons, ['llm_failed:timeout']);
     assert.deepEqual(describeFailure(new Error('ECONNREFUSED')).reasons, ['llm_failed:unreachable']);
+  });
+});
+
+describe('the message handed to the model', () => {
+  it('names the words the regex caught, so the question is a closed one', () => {
+    const built = buildUserMessage('che bel finocchio che mi hai venduto', {
+      reasons: ['ambiguous_language'],
+      matches: ['finocchio']
+    });
+    assert.ok(built.includes('che bel finocchio che mi hai venduto'));
+    assert.ok(built.includes('"finocchio"'));
+    assert.ok(built.includes('literally'));
+  });
+
+  it('says nothing extra when there is nothing to point at', () => {
+    assert.equal(buildUserMessage('buon compleanno nonna'), 'Message: "buon compleanno nonna"');
+    assert.equal(
+      buildUserMessage('chiamami al 333 1234567', {
+        reasons: ['phone_number'],
+        matches: ['333 1234567']
+      }),
+      'Message: "chiamami al 333 1234567"'
+    );
+  });
+
+  it('carries the handle flag too, which never travels with a match', () => {
+    const built = buildUserMessage('ciao a tutti', {
+      reasons: ['handle_ambiguous'],
+      matches: ['finocchio']
+    });
+    assert.ok(built.includes('"finocchio"'));
   });
 });

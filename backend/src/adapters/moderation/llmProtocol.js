@@ -68,6 +68,36 @@ export const RESPONSE_SCHEMA = Object.freeze({
   required: ['reasoning', 'verdict']
 });
 
+/**
+ * 20260903 ++ RG #regex_context_to_the_model
+ * The model used to arrive blind: it was handed a message and no hint that the regex
+ * stage had already parked it over one specific word. Naming that word turns an open
+ * question ("is this message acceptable?") into a closed one a small model can answer
+ * ("is this word literal, affectionate, or an attack?").
+ *
+ * Only the ambiguous flags produce a hint. A phone number or a link is not a word
+ * whose meaning the model has to weigh, and pointing at one would just add noise.
+ *
+ * @param {string} text
+ * @param {{ reasons?: string[], matches?: string[] }} [context]
+ * @returns {string}
+ */
+export function buildUserMessage(text, context = {}) {
+  const ambiguous = (context.reasons ?? []).some((reason) => reason.endsWith('ambiguous_language') || reason === 'handle_ambiguous');
+  const words = (context.matches ?? []).slice(0, 3);
+  // The same shape as the few-shot examples: a model that has just read five turns
+  // starting with "Message:" should get a sixth that looks like them.
+  if (!ambiguous || words.length === 0) return `Message: "${text}"`;
+
+  const quoted = words.map((word) => `"${word}"`).join(', ');
+  const subject = words.length === 1 ? `the word ${quoted} is` : `the words ${quoted} are`;
+  return (
+    `Message: "${text}"\n[Automatic filter: ${subject} on the ambiguous list. Decide from ` +
+    'this sentence alone whether it is used literally, affectionately, or as an attack ' +
+    'on someone.]'
+  );
+}
+
 /** Enough of the model's reasoning to be worth reading in the admin panel. */
 const REASON_MAX_LENGTH = 80;
 

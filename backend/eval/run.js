@@ -67,7 +67,7 @@ function heading(title) {
 
 /**
  * @param {GoldenCase[]} cases
- * @returns {Promise<number>} how many cases the regex stage got wrong on its own
+ * @returns {Promise<{ regressions: number, contexts: Map<number, { reasons: string[], matches: string[] }> }>}
  */
 async function scoreRegexStage(cases) {
   const regex = new RegexModerationAdapter();
@@ -76,9 +76,12 @@ async function scoreRegexStage(cases) {
   const regressions = [];
   /** @type {Array<{ item: GoldenCase, got: string }>} */
   const known = [];
+  /** @type {Map<number, { reasons: string[], matches: string[] }>} */
+  const contexts = new Map();
 
   for (const item of cases) {
     const result = await regex.evaluate(item.text);
+    contexts.set(item.id, { reasons: result.reasons, matches: result.matches ?? [] });
     const reasonsMatch =
       item.reasons.length === 0 || item.reasons.every((reason) => result.reasons.includes(reason));
 
@@ -107,15 +110,17 @@ async function scoreRegexStage(cases) {
     }
   }
 
-  return regressions.length;
+  return { regressions: regressions.length, contexts };
 }
 
 /**
  * @param {GoldenCase[]} cases
  * @param {import('../src/ports/ModerationPort.js').LlmModerationPort} llm
  * @param {number} repeat
+ * @param {Map<number, { reasons: string[], matches: string[] }>} contexts what stage 1
+ *   found, handed over exactly as the escalation use case hands it over in production
  */
-async function scoreLlmStage(cases, llm, repeat) {
+async function scoreLlmStage(cases, llm, repeat, contexts) {
   /** @type {Record<string, Record<string, number>>} */
   const matrix = { safe: {}, unsure: {}, unsafe: {} };
   /** @type {Array<{ item: GoldenCase, got: string[], kind: string }>} */
@@ -128,7 +133,7 @@ async function scoreLlmStage(cases, llm, repeat) {
     const verdicts = [];
 
     for (let run = 0; run < repeat; run += 1) {
-      const result = await llm.evaluate(item.text);
+      const result = await llm.evaluate(item.text, contexts.get(item.id));
       const failed = result.reasons.some((reason) => reason.startsWith('llm_failed:'));
       if (failed) {
         failures += 1;
@@ -210,7 +215,7 @@ async function main() {
   /** @type {{ cases: GoldenCase[] }} */
   const golden = JSON.parse(readFileSync(CASES_PATH, 'utf8'));
 
-  const regressions = await scoreRegexStage(golden.cases);
+  const { regressions, contexts } = await scoreRegexStage(golden.cases);
 
   const config = loadConfig();
   const llm = createLlmAdapter(config);
@@ -230,7 +235,7 @@ async function main() {
     ? golden.cases.filter((item) => item.regex === ModerationVerdict.NEEDS_REVIEW)
     : golden.cases;
 
-  await scoreLlmStage(subject, llm, repeat);
+  await scoreLlmStage(subject, llm, repeat, contexts);
   process.exitCode = regressions > 0 ? 1 : 0;
 }
 

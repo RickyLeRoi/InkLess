@@ -57,7 +57,10 @@ export class SubmitMessage {
 
     await this.messages.save(message);
 
-    if (message.status === 'pending') this.#considerEscalation();
+    // 20260903 ** RG #audit_the_published_too
+    // Approved counts as well: the audit pass looks at published messages, so a board
+    // fed only by clean submissions must still be able to reach the threshold.
+    if (message.status !== 'rejected') this.#considerEscalation();
 
     return { message, verdict, reasons, matches: matches ?? [] };
   }

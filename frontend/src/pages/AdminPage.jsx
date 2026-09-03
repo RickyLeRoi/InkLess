@@ -18,7 +18,8 @@ const REASON_LABELS = {
   handle_blasphemy: 'username: bestemmia',
   handle_profanity: 'username: volgarita',
   handle_ambiguous: 'username: ambiguo',
-  appeal_requested: 'reclamo'
+  appeal_requested: 'reclamo',
+  llm_takedown: 'ritirato dalla bacheca dal modello'
 };
 
 /** @param {string} reason */

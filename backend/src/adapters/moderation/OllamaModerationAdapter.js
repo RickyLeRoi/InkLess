@@ -2,6 +2,7 @@
 
 import {
   REQUEST_TIMEOUT_MS,
+  buildUserMessage,
   RESPONSE_SCHEMA,
   SYSTEM_PROMPT,
   describeFailure,
@@ -40,9 +41,11 @@ export class OllamaModerationAdapter {
 
   /**
    * @param {string} text
+   * @param {{ reasons?: string[], matches?: string[] }} [context] what the regex stage
+   *   already found, so the model is asked about that word rather than about nothing
    * @returns {Promise<import('../../ports/ModerationPort.js').ModerationResult>}
    */
-  async evaluate(text) {
+  async evaluate(text, context) {
     let payload;
     try {
       const response = await fetch(`${this.baseUrl}/api/chat`, {
@@ -61,7 +64,7 @@ export class OllamaModerationAdapter {
           options: { temperature: 0 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: text }
+            { role: 'user', content: buildUserMessage(text, context) }
           ]
         })
       });

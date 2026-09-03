@@ -65,7 +65,7 @@ export function strictestOf(...results) {
  * a batch once the queue justifies it rather than on every submission.
  *
  * @typedef {object} LlmModerationPort
- * @property {(text: string) => Promise<ModerationResult>} evaluate
+ * @property {(text: string, context?: { reasons?: string[], matches?: string[] }) => Promise<ModerationResult>} evaluate
  * @property {() => Promise<boolean>} isAvailable
  */
 

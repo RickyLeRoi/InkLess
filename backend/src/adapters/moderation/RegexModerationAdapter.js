@@ -2,7 +2,13 @@
 
 import { ModerationVerdict } from '../../ports/ModerationPort.js';
 import { INSTAGRAM_HANDLE_MAX_LENGTH, MESSAGE_MAX_LENGTH } from '../../domain/text.js';
-import { BLASPHEMY, HARD_REJECT, PROFANITY, SUSPICIOUS } from './blocklist.js';
+import {
+  BLASPHEMY,
+  HARD_REJECT,
+  PROFANITY,
+  SUSPICIOUS,
+  SUSPICIOUS_PAIRS
+} from './blocklist.js';
 
 /** @type {Readonly<Record<string, string>>} */
 const LEET_MAP = Object.freeze({
@@ -50,6 +56,14 @@ const SHOUTING_RATIO = 0.7;
 const SEPARATOR = '[^\\p{L}\\p{N}]{0,2}';
 /** How much may sit between the two halves of a compositional insult: "porco dio". */
 const GAP = '[^\\p{L}\\p{N}]{0,3}';
+/**
+ * 20260903 ++ RG #ordered_pairs
+ * The looser gap the ordered pairs need: up to two short words between the halves, so
+ * "spacco la faccia" and "ti spacco quella faccia" both land while the two words stay
+ * in the same clause. Anything longer than four letters ends the match, which is what
+ * keeps a pair from spanning half the message.
+ */
+const WORD_GAP = '[^\\p{L}\\p{N}]{1,3}(?:\\p{L}{1,4}[^\\p{L}\\p{N}]{1,3}){0,2}';
 
 /** Enough to show the author what tripped the filter without printing a wall. */
 const MAX_REPORTED_MATCHES = 8;
@@ -223,8 +237,26 @@ function alternationOf(words) {
  * @returns {string}
  */
 function epithetAlternation(transform = (value) => value) {
-  const ending = transform(BLASPHEMY.epithetEnding);
+  // 20260903 ** RG #truncated_epithets
+  // The ending is optional, or "dio can" walks past a matcher that catches "dio cane"
+  // — and the truncated form is the one Veneto actually says. No stem on the list is
+  // an Italian word on its own, and the pair still has to sit next to a deity, so
+  // widening this end costs nothing.
+  const ending = `${transform(BLASPHEMY.epithetEnding)}?`;
   return BLASPHEMY.epithetStems.map((stem) => `${escapeRegex(transform(stem))}${ending}`).join('|');
+}
+
+/**
+ * Builds the matcher for an ordered pair: left half, a short gap, right half. Not
+ * buildPairMatcher: that one accepts either order, which here would turn "lo scopo ti
+ * riguarda" into a proposition.
+ *
+ * @param {readonly string[]} pair
+ * @returns {RegExp}
+ */
+function buildOrderedPairMatcher(pair) {
+  const [left, right] = pair.map((word) => [...escapeRegex(word)].join(SEPARATOR));
+  return new RegExp(`(?<!\\p{L})${left}${WORD_GAP}${right}(?!\\p{L})`, 'giu');
 }
 
 /**
@@ -270,6 +302,8 @@ export class RegexModerationAdapter {
       alternationOf(BLASPHEMY.deities.map(squeezeRuns)),
       epithetAlternation(squeezeRuns)
     );
+
+    this.suspiciousPairs = SUSPICIOUS_PAIRS.map(buildOrderedPairMatcher);
 
     this.handleMatchers = {
       hate: buildSubstringMatcher(HARD_REJECT),
@@ -384,11 +418,6 @@ export class RegexModerationAdapter {
     // The domain half of an address matches URL_LIKE, so emails are masked out first:
     // leaving a contact detail for a human to judge beats auto-rejecting it as spam.
     const withoutEmails = text.replace(EMAIL_LIKE, ' ');
-    const links = phraseHits(URL_LIKE, withoutEmails);
-    if (links.length > 0) {
-      return { verdict: ModerationVerdict.REJECT, reasons: ['link_spam'], matches: unique(links) };
-    }
-
     /** @type {string[]} */
     const doubts = [];
     /** @type {string[]} */
@@ -405,13 +434,28 @@ export class RegexModerationAdapter {
     };
 
     suspect(wordHits(this.matchers.suspicious), 'ambiguous_language');
+    suspect(
+      this.suspiciousPairs.flatMap((matcher) => phraseHits(matcher, folded)),
+      'ambiguous_language'
+    );
+    // 20260903 ** RG #link_is_not_spam_by_itself
+    // Demoted from rejection to review: this board is built around Instagram handles,
+    // and the link in the body is what somebody writes when they have not found the
+    // field for it. The spammer still gets stopped, by a person.
+    suspect(phraseHits(URL_LIKE, withoutEmails), 'link_spam');
     suspect(phraseHits(EMAIL_LIKE, text), 'contact_details');
     suspect(phraseHits(PHONE_LIKE, text), 'phone_number');
     suspect(phraseHits(CHAR_FLOOD, text), 'character_flood');
     if (isShouting(text)) doubts.push('shouting');
 
     if (doubts.length > 0) {
-      return { verdict: ModerationVerdict.NEEDS_REVIEW, reasons: doubts, matches: unique(matches) };
+      // The words and the ordered pairs answer to the same reason, so a message
+      // carrying both must not tell the admin about it twice.
+      return {
+        verdict: ModerationVerdict.NEEDS_REVIEW,
+        reasons: [...new Set(doubts)],
+        matches: unique(matches)
+      };
     }
     return { verdict: ModerationVerdict.AUTO_APPROVE, reasons: [], matches: [] };
   }

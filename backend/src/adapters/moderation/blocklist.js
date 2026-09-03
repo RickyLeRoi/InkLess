@@ -79,14 +79,45 @@ export const SUSPICIOUS = Object.freeze([
   'checca',
   'ritardato',
   'handicappato',
-  'crucco',
-  'giudeo'
+  'giudeo',
+  // 20260903 ++ RG #violence_words
+  // Not insults, but the vocabulary of a threat or an accusation. Review, never
+  // rejection: "ammazzo" is a word a cook uses too, and "ladro" is half of Italian
+  // football commentary. "ammazza" stays out on purpose — in Roman it means "wow".
+  'ammazzo',
+  'ladro',
+  'ladri',
+  // The infinitive alone let every conjugation walk past. Only the unambiguous forms:
+  // "scopo" is a noun before it is a verb, and it is handled as an ordered pair below.
+  'scopata',
+  'scopate',
+  'scoparti',
+  'scoparmi'
+]);
+
+/**
+ * 20260903 ++ RG #ordered_pairs
+ * Expressions that are only offensive as a sequence, and only in this order. The
+ * blasphemy matcher cannot express them twice over: it accepts the two halves in
+ * either order, and it allows no word between them, while "spacco la faccia" has one.
+ * Reversing them is what makes the difference between a threat and "lo scopo ti sarà
+ * chiaro", so these are matched left to right only.
+ */
+export const SUSPICIOUS_PAIRS = Object.freeze([
+  Object.freeze(['spacco', 'faccia']),
+  Object.freeze(['spacca', 'faccia']),
+  Object.freeze(['ti', 'scopo'])
 ]);
 
 /**
  * Slurs and hate markers. Never merely flagged: these are rejected without appeal,
  * because there is no context in a 200-character message that redeems them.
  */
+// 20260903 -- RG
+// "terrone" and "terroni" left the list, and "crucco" left SUSPICIOUS: regional
+// epithets have worn down to the level of "polentone" in the register this board
+// speaks, and rejecting them without appeal was the harshest verdict in the pipeline
+// spent on football banter.
 export const HARD_REJECT = Object.freeze([
   'negro',
   'negri',
@@ -96,8 +127,6 @@ export const HARD_REJECT = Object.freeze([
   'ricchione',
   'zingaro',
   'zingari',
-  'terrone',
-  'terroni',
   'mongoloide',
   'nigger',
   'faggot',
