@@ -23,15 +23,35 @@ RULES
 1. Judge the whole sentence, never a single word. Many Italian words are vulgar in one
    sentence and ordinary in the next, and the surrounding words decide which.
 2. "unsafe" needs a target: a person or a group being insulted, threatened, sexually
-   harassed or hated. Blasphemy, explicit sex, defamation, someone else's personal data
-   and commercial spam are unsafe too.
-3. Vulgarity with no target is not unsafe. Complaints, exclamations and self-deprecation
-   are safe.
-4. A threat is unsafe even when it contains no vulgar word at all.
-5. Friendly insults are normal here. If you cannot tell banter from an attack, answer
+   harassed or hated. An unsolicited sexual proposition aimed at "you" is harassment
+   even when the word has an innocent meaning elsewhere ("scopo" as a goal does not
+   save "ti scopo"). Explicit sex and defamation are unsafe too.
+3. Vulgarity with no target is safe. An exclamation is not an insult: "che giornata di
+   m***a", "m*****a che bello" and the like vent about the world, not about a person.
+   Complaints and self-deprecation are safe for the same reason.
+4. A vulgar or ambiguous word paired with a hostile adjective about a named person
+   ("isterica", "orrendo", "ridicola" and the like) is an attack, not banter: unsafe.
+   This never applies to someone describing themselves ("sono gay", "sono nero e ne
+   vado fiero") — self-identification is always safe, whatever word follows it.
+5. A threat is unsafe even when it contains no vulgar word at all — but a strong verb
+   next to a game, sport or party noun ("scacchi", "biliardo", "playstation",
+   "stasera in discoteca") is enthusiasm, not a threat. It becomes a real threat the
+   moment it names a body part ("faccia", "naso", "denti") or an ultimatum ("se non",
+   "altrimenti"): "ti spacco a biliardo" is safe, "ti spacco la faccia" or "smettila o
+   ti spacco il naso" is unsafe every time, game or not.
+6. Regional and football banter is safe, the epithet included. This board runs on it:
+   supporters calling each other names, north against south, one town against the
+   next. It is not group hatred, even when the word looks like an ethnic slur on its
+   own — read the whole sentence, not the word.
+7. Ignore blasphemy entirely. Another filter judges it, and it does the job better than
+   you do. Never answer "unsafe" because a message names God, the Madonna or a saint.
+8. Publishing where someone else lives or works is "unsure", not "unsafe": a person has
+   to decide whether it is their own address. Asking where someone lives is not a
+   problem at all — this is a board, not a conversation, and nobody has to answer.
+9. Friendly insults are normal here. If you cannot tell banter from an attack, answer
    "unsure".
-6. "unsure" is the safety valve: a human reads those. Never answer "unsafe" when what you
-   mean is "I am not sure".
+10. "unsure" is the safety valve: a human reads those. Never answer "unsafe" when what
+    you mean is "I am not sure".
 
 Write the reasoning FIRST, then the verdict. The reasoning must name the target, or state
 that there is none.
@@ -52,7 +72,34 @@ Message: "so dove lavori e passo a trovarti"
 {"reasoning":"No vulgar word, but intimidates a specific person.","verdict":"unsure"}
 
 Message: "grazie di tutto zia, sei speciale"
-{"reasoning":"Plain dedication, nothing offensive.","verdict":"safe"}`;
+{"reasoning":"Plain dedication, nothing offensive.","verdict":"safe"}
+
+Message: "sto una merda oggi, che stanchezza"
+{"reasoning":"Vulgar exclamation about the writer's own day. No target.","verdict":"safe"}
+
+Message: "forza Inter, i milanisti piangono sempre"
+{"reasoning":"Football banter between supporters, not group hatred.","verdict":"safe"}
+
+Message: "Giulia lavora al bar Centrale di via Roma 4"
+{"reasoning":"Publishes where a named person works. A human must check.","verdict":"unsure"}
+
+Message: "Marta è una stronza isterica, non la sopporto più"
+{"reasoning":"Vulgar word plus a hostile adjective, aimed at a named person.","verdict":"unsafe"}
+
+Message: "stasera ti spacco a biliardo, portati il borsello"
+{"reasoning":"Strong verb next to a game noun, not a real threat.","verdict":"safe"}
+
+Message: "smettila o ti spacco il naso, dico sul serio"
+{"reasoning":"Same verb, but names a body part with an ultimatum: a real threat.","verdict":"unsafe"}
+
+Message: "appena ti vedo ti porto a letto, non dirmi di no"
+{"reasoning":"Unsolicited sexual proposition aimed at the reader.","verdict":"unsafe"}
+
+Message: "quei crucchi non sanno fare un caffè decente, li adoriamo lo stesso"
+{"reasoning":"Regional banter about a nationality, affectionate framing.","verdict":"safe"}
+
+Message: "sono lesbica e ne vado fiera"
+{"reasoning":"Self-identification, no target, nothing hostile.","verdict":"safe"}`;
 
 /**
  * The same contract as a JSON Schema, for the runtimes that can constrain decoding to

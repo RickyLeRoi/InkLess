@@ -321,6 +321,15 @@ describe('spam and contact details', () => {
     assert.deepEqual(result.reasons, ['contact_details']);
   });
 
+  it('flags an address, and only when there is a house number on it', async () => {
+    const result = await moderation.evaluate('Luca abita in via Dante 7');
+    assert.equal(result.verdict, ModerationVerdict.NEEDS_REVIEW);
+    assert.deepEqual(result.reasons, ['street_address']);
+    assert.deepEqual(result.matches, ['via Dante 7']);
+
+    assert.equal(await verdictOf('ci vediamo in via Roma davanti al bar'), ModerationVerdict.AUTO_APPROVE);
+  });
+
   it('flags shouting', async () => {
     const result = await moderation.evaluate('QUESTO MESSAGGIO E TUTTO URLATO DAVVERO');
     assert.equal(result.verdict, ModerationVerdict.NEEDS_REVIEW);

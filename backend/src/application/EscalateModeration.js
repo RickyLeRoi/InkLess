@@ -14,6 +14,23 @@ const LLM_FAILURE_PREFIX = 'llm_failed:';
  */
 const HUMAN_ONLY_REASONS = Object.freeze(['ambiguous_language', 'handle_ambiguous']);
 
+/**
+ * 20260903 ++ RG #model_does_not_publish_personal_data
+ * Reasons that are not a judgement about language: a phone number, an email, a home
+ * address, a link, a wall of characters. The model reads sentences, and asked about
+ * these it answers "no vulgarity, no target, safe" — which is true and beside the
+ * point, because what has to be decided is whether that number belongs to the person
+ * writing it. So it may leave such a message in the queue, never publish it.
+ */
+const NON_LINGUISTIC_REASONS = Object.freeze([
+  'contact_details',
+  'phone_number',
+  'street_address',
+  'link_spam',
+  'character_flood',
+  'shouting'
+]);
+
 /** Says in the admin queue why a published message came back. */
 export const LLM_TAKEDOWN_REASON = 'llm_takedown';
 
@@ -128,10 +145,15 @@ export class EscalateModeration {
     if (verdict === ModerationVerdict.AUTO_APPROVE) {
       // Already on the board: the audit pass agreeing with the regex changes nothing
       // except the reviewed stamp, and approve() on an approved message would throw.
-      if (!published) {
-        message.approve();
-        summary.approved += 1;
+      if (published) return;
+
+      if (this.#reasonsFor(message, context).some((r) => NON_LINGUISTIC_REASONS.includes(r))) {
+        summary.keptForHuman += 1;
+        return;
       }
+
+      message.approve();
+      summary.approved += 1;
       return;
     }
 
@@ -160,10 +182,19 @@ export class EscalateModeration {
    * @returns {boolean}
    */
   #humanOnly(message, context) {
-    // Both sets: the fresh pass covers the body under today's lists, the stored one
-    // carries what the handle contributed at submission.
-    const reasons = [...context.reasons, ...message.moderationReasons];
-    return reasons.some((reason) => HUMAN_ONLY_REASONS.includes(reason));
+    return this.#reasonsFor(message, context).some((reason) => HUMAN_ONLY_REASONS.includes(reason));
+  }
+
+  /**
+   * Both sets: the fresh pass covers the body under today's lists, the stored one
+   * carries what the handle contributed at submission.
+   *
+   * @param {import('../domain/Message.js').Message} message
+   * @param {{ reasons: string[] }} context
+   * @returns {string[]}
+   */
+  #reasonsFor(message, context) {
+    return [...context.reasons, ...message.moderationReasons];
   }
 
   /**

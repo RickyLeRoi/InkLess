@@ -334,3 +334,36 @@ describe('the audit of published messages', () => {
     assert.equal(outcome.examined, 3);
   });
 });
+
+describe('what the model may publish', () => {
+  /**
+   * Asked about a phone number the model answers "no vulgarity, no target, safe",
+   * which is true and beside the point: what has to be decided is whether the number
+   * belongs to whoever wrote it, and that is not a question about language.
+   */
+  it('will not publish a message queued over personal data', async () => {
+    const message = await seedOne('chiamami al 333 1234567');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    const outcome = await escalationFor(llm).run();
+
+    assert.equal(outcome.approved, 0);
+    assert.equal(outcome.keptForHuman, 1);
+    const stored = await repository.findById(message.id);
+    assert.equal(stored?.status, 'pending');
+  });
+
+  it('will not publish an address either', async () => {
+    await seedOne('Luca abita in via Dante 7, passate a trovarlo');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    assert.equal((await escalationFor(llm).run()).approved, 0);
+  });
+
+  it('still publishes an ambiguous message it finds harmless', async () => {
+    await seedOne('che culo che hai avuto');
+    const llm = new ScriptedLlm(() => result(ModerationVerdict.AUTO_APPROVE));
+
+    assert.equal((await escalationFor(llm).run()).approved, 1);
+  });
+});

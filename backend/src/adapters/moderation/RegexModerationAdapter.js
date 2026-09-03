@@ -48,6 +48,16 @@ const HOMOGLYPH_MAP = Object.freeze({
 const URL_LIKE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|net|org|it|io|xyz|ru|top|link)\b)/gi;
 const EMAIL_LIKE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
 const PHONE_LIKE = /(?:\+?\d[\s.-]?){8,}/g;
+/**
+ * 20260903 ++ RG #street_address
+ * Where somebody lives or works, which is personal data whoever wrote it. A street
+ * word, a name and a house number: the number is what makes it an address rather than
+ * a mention, so "ci vediamo in via Roma" stays clean and "abita in via Roma 4" does
+ * not. Pattern work, not language work — which is why it belongs here and the model is
+ * told to leave it alone.
+ */
+const ADDRESS_LIKE =
+  /\b(?:via|viale|piazza|piazzale|corso|vicolo|largo|strada|contrada)\s+[\p{L}'’.-]+(?:\s+[\p{L}'’.-]+)?[,\s]+\d{1,4}\b/giu;
 const CHAR_FLOOD = /(.)\1{5,}/g;
 const SHOUTING_MIN_LENGTH = 20;
 const SHOUTING_RATIO = 0.7;
@@ -445,6 +455,7 @@ export class RegexModerationAdapter {
     suspect(phraseHits(URL_LIKE, withoutEmails), 'link_spam');
     suspect(phraseHits(EMAIL_LIKE, text), 'contact_details');
     suspect(phraseHits(PHONE_LIKE, text), 'phone_number');
+    suspect(phraseHits(ADDRESS_LIKE, text), 'street_address');
     suspect(phraseHits(CHAR_FLOOD, text), 'character_flood');
     if (isShouting(text)) doubts.push('shouting');
 

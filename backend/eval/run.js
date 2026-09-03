@@ -31,6 +31,22 @@ const EXPECTED_LLM = Object.freeze({
   unsafe: ModerationVerdict.REJECT
 });
 
+/**
+ * 20260903 ++ RG #pipeline_outcome_not_just_the_verdict
+ * Reasons the escalation rules override the model with. A wrong verdict on one of
+ * these costs nothing: the message ends up where it should anyway, and counting it as
+ * an error hides the ones that actually get through.
+ */
+const DEMOTES_REJECT = Object.freeze(['ambiguous_language', 'handle_ambiguous']);
+const BLOCKS_APPROVAL = Object.freeze([
+  'contact_details',
+  'phone_number',
+  'street_address',
+  'link_spam',
+  'character_flood',
+  'shouting'
+]);
+
 const SHORT = Object.freeze({
   auto_approve: 'safe',
   needs_review: 'unsure',
@@ -44,7 +60,8 @@ const SHORT = Object.freeze({
  * @property {string} text
  * @property {'auto_approve' | 'needs_review' | 'reject'} regex
  * @property {string[]} reasons
- * @property {'safe' | 'unsure' | 'unsafe'} llm
+ * @property {'safe' | 'unsure' | 'unsafe' | 'n/a'} llm "n/a" means stage 1 owns the
+ *   case and the model is told to stay out of it: there is no verdict to score
  * @property {string} [todo]
  * @property {string} [note]
  */
@@ -127,8 +144,16 @@ async function scoreLlmStage(cases, llm, repeat, contexts) {
   const wrong = [];
   let failures = 0;
   let total = 0;
+  let skipped = 0;
+  /** @type {Array<{ item: GoldenCase, got: string[], kind: string }>} */
+  const neutralized = [];
 
   for (const item of cases) {
+    if (item.llm === 'n/a') {
+      skipped += 1;
+      continue;
+    }
+
     /** @type {string[]} */
     const verdicts = [];
 
@@ -149,7 +174,10 @@ async function scoreLlmStage(cases, llm, repeat, contexts) {
     const judged = verdicts.filter((verdict) => !verdict.startsWith('llm_failed:'));
     const agreed = judged.every((verdict) => verdict.startsWith(item.llm));
     if (judged.length > 0 && !agreed) {
-      wrong.push({ item, got: verdicts, kind: classify(item.llm, judged) });
+      const kind = classify(item.llm, judged);
+      const override = overriddenBy(kind, contexts.get(item.id)?.reasons ?? []);
+      if (override) neutralized.push({ item, got: verdicts, kind: override });
+      else wrong.push({ item, got: verdicts, kind });
     }
   }
 
@@ -175,6 +203,22 @@ async function scoreLlmStage(cases, llm, repeat, contexts) {
   console.log(`falsi approvati: ${falseApprovals}/${total} (${percent(falseApprovals, total)})`);
   console.log(`tasso di coda:   ${queued}/${total} (${percent(queued, total)})`);
   if (failures > 0) console.log(`chiamate fallite: ${failures}`);
+  if (skipped > 0) console.log(`fuori dal punteggio (li decide lo stadio 1): ${skipped}`);
+
+  // What survives the escalation rules is the number that matters: the rest never
+  // reaches the board or the bin, whatever the model said.
+  const escaped = wrong.filter(({ kind }) => kind !== 'salta la coda');
+  console.log(
+    `\nerrori che la pipeline NON corregge: ${escaped.length}` +
+      ` (${escaped.map(({ item }) => `#${item.id}`).join(', ') || 'nessuno'})`
+  );
+
+  if (neutralized.length > 0) {
+    console.log(`\ncorretti dalle regole di escalation (${neutralized.length}):`);
+    for (const { item, got, kind } of neutralized) {
+      console.log(`  [${kind}] #${item.id} "${item.text}" — il modello dice ${got.join(' | ')}`);
+    }
+  }
 
   if (wrong.length > 0) {
     console.log(`\nscarti (${wrong.length}):`);
@@ -183,6 +227,23 @@ async function scoreLlmStage(cases, llm, repeat, contexts) {
       console.log(`     atteso ${item.llm}, ottenuto ${got.join(' | ')}`);
     }
   }
+}
+
+/**
+ * Whether the escalation rules turn this particular mistake into a non-event.
+ *
+ * @param {string} kind
+ * @param {string[]} reasons what stage 1 flagged
+ * @returns {string | null} the rule that catches it, or null when nothing does
+ */
+function overriddenBy(kind, reasons) {
+  if (kind === 'falso rifiuto' && reasons.some((reason) => DEMOTES_REJECT.includes(reason))) {
+    return 'rifiuto declassato a coda';
+  }
+  if (kind === 'salta la coda' && reasons.some((reason) => BLOCKS_APPROVAL.includes(reason))) {
+    return 'pubblicazione bloccata';
+  }
+  return null;
 }
 
 /**

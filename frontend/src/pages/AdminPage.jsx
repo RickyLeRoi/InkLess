@@ -12,6 +12,7 @@ const REASON_LABELS = {
   link_spam: 'link',
   contact_details: 'contatti',
   phone_number: 'telefono',
+  street_address: 'indirizzo',
   character_flood: 'caratteri ripetuti',
   shouting: 'urlato',
   handle_hate_speech: 'username: odio',

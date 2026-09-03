@@ -25,6 +25,11 @@ describe('the response contract', () => {
     assert.ok(RESPONSE_SCHEMA.properties.verdict.enum.includes('unsure'));
   });
 
+  it('hands blasphemy back to the regex stage instead of guessing', () => {
+    assert.ok(/Ignore blasphemy entirely/.test(SYSTEM_PROMPT));
+    assert.ok(!/Blasphemy[^.]*are unsafe/.test(SYSTEM_PROMPT));
+  });
+
   it('never uses a golden-set message as an example', () => {
     const golden = ['finocchio che mi hai venduto', 'tua sorella', 'ti aspetto sotto casa'];
     for (const text of golden) assert.ok(!SYSTEM_PROMPT.includes(text), text);
