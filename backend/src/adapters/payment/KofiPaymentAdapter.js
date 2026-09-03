@@ -85,9 +85,12 @@ export class KofiPaymentAdapter {
       throw new ValidationError('Ko-fi verification token does not match');
     }
 
-    // Shop orders, memberships and commissions are not something this app sells: only
-    // a plain donation can ever be the payment for a print job.
-    if (payload.type !== 'Donation') {
+    // 20260903 ** RG #kofi_subscriptions_pay_too
+    // Shop orders and commissions are not something this app sells, but a Ko-fi
+    // membership subscription is just a recurring donation from this app's point of
+    // view — same message field to carry the code, same amount/paid shape — so it
+    // pays for a print exactly like a one-off donation does.
+    if (payload.type !== 'Donation' && payload.type !== 'Subscription') {
       return { paymentRef: '', amountCents: 0, paid: false };
     }
 

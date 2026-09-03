@@ -143,7 +143,7 @@ describe('paid print flow', () => {
   });
 
   it('hands the hardware a ready-made attribution line', async () => {
-    const { job } = await bookPrint(100);
+    const { job } = await bookPrint(200);
     /** @type {any[]} */
     const tickets = [];
     context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
@@ -187,8 +187,8 @@ describe('paid print flow', () => {
     assert.equal(tickets.length, 1);
   });
 
-  it('withholds the video below one euro', async () => {
-    const { job } = await bookPrint(60);
+  it('withholds the video below two euros', async () => {
+    const { job } = await bookPrint(100);
     /** @type {any[]} */
     const tickets = [];
     context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
@@ -206,7 +206,7 @@ describe('paid print flow', () => {
   });
 
   it('moves the board counter only when paper actually came out', async () => {
-    const { message, job } = await bookPrint(100);
+    const { message, job } = await bookPrint(200);
     await context.confirmPayment.execute(callbackBody(job.paymentRef), {});
 
     let stored = await context.messages.findById(message.id);
@@ -244,16 +244,16 @@ describe('paid print flow', () => {
   }
 
   it('upgrades to the video tier when the confirmed amount is higher than requested', async () => {
-    const { job } = await bookPrint(60);
+    const { job } = await bookPrint(100);
     /** @type {any[]} */
     const tickets = [];
     context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
 
-    await context.confirmPayment.execute(callbackBodyWithAmount(job.paymentRef, 150), {});
+    await context.confirmPayment.execute(callbackBodyWithAmount(job.paymentRef, 250), {});
 
     assert.equal(tickets[0].includesVideo, true);
     const stored = await context.jobs.findById(job.id);
-    assert.equal(stored.amountCents, 150);
+    assert.equal(stored.amountCents, 250);
   });
 
   it('refuses a confirmation for less than the requested amount', async () => {
@@ -302,8 +302,8 @@ describe('matching an unmatched Ko-fi donation by hand', () => {
   }
 
   it('queues the job an admin attaches the donation to', async () => {
-    const { job } = await bookPrint(60);
-    const donation = await logDonation({ amountCents: 60 });
+    const { job } = await bookPrint(100);
+    const donation = await logDonation({ amountCents: 100 });
     /** @type {any[]} */
     const tickets = [];
     context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
@@ -317,9 +317,9 @@ describe('matching an unmatched Ko-fi donation by hand', () => {
   });
 
   it('refuses to match the same donation twice', async () => {
-    const { job } = await bookPrint(60);
-    const other = await bookPrint(60);
-    const donation = await logDonation({ amountCents: 60 });
+    const { job } = await bookPrint(100);
+    const other = await bookPrint(100);
+    const donation = await logDonation({ amountCents: 100 });
 
     await context.matchKofiDonation.execute(donation.id, job.id);
 

@@ -19,12 +19,17 @@ export const PrintJobStatus = Object.freeze({
 
 /**
  * 20260830 ++ RG #money_as_integer_cents
- * Donations are held as integer cents everywhere. The tier boundaries are 0.50 and
- * 1.00 EUR and floating point makes those comparisons a coin toss: 0.1 + 0.2 > 0.3
- * is true in IEEE 754, and a payer sitting exactly on 1.00 must always get the video.
+ * Donations are held as integer cents everywhere. The tier boundaries are 1.00 and
+ * 2.00 EUR and floating point makes those comparisons a coin toss: 0.1 + 0.2 > 0.3
+ * is true in IEEE 754, and a payer sitting exactly on 2.00 must always get the video.
+ *
+ * 20260903 ** RG #kofi_minimum_is_one_euro
+ * Ko-fi refuses donations below 1.00 EUR outright, so the print floor moved up to
+ * match it and is now inclusive rather than "more than 0.50" — there is no longer a
+ * lower tier for it to be exclusive against.
  */
-export const MINIMUM_PRINT_CENTS = 51;
-export const VIDEO_THRESHOLD_CENTS = 100;
+export const MINIMUM_PRINT_CENTS = 100;
+export const VIDEO_THRESHOLD_CENTS = 200;
 
 /** @type {Readonly<Record<string, PrintJobStatusValue[]>>} */
 const ALLOWED_TRANSITIONS = Object.freeze({

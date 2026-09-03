@@ -43,8 +43,8 @@ Niente account, niente login, niente OAuth. Solo un messaggio e della carta.
 
 | Donazione | Cosa succede |
 |---|---|
-| **> 0,50 €** | il messaggio entra in coda e viene stampato su carta termica |
-| **≥ 1,00 €** | oltre alla stampa, una webcam puntata sulla stampante registra la clip |
+| **≥ 1,00 €** | il messaggio entra in coda e viene stampato su carta termica |
+| **≥ 2,00 €** | oltre alla stampa, una webcam puntata sulla stampante registra la clip |
 
 Chi paga resta sulla pagina e riceve l'aggiornamento in tempo reale: coda, stampa in corso,
 clip pronta.

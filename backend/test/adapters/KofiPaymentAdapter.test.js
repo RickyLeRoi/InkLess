@@ -157,13 +157,23 @@ describe('KofiPaymentAdapter.verifyCallback', () => {
     assert.equal(repos.savedDonations.length, 1);
   });
 
-  it('ignores anything that is not a plain donation', async () => {
+  it('ignores anything that is not a donation or a subscription payment', async () => {
     const confirmation = await buildAdapter(repos).verifyCallback(
-      donationBody({ type: 'Subscription' })
+      donationBody({ type: 'Shop Order' })
     );
 
     assert.deepEqual(confirmation, { paymentRef: '', amountCents: 0, paid: false });
     assert.equal(repos.savedDonations.length, 0);
+  });
+
+  it('accepts a membership subscription payment exactly like a donation', async () => {
+    repos.jobsByPaymentRef.set('INK-SUBSCR', { id: 'job-4' });
+
+    const confirmation = await buildAdapter(repos).verifyCallback(
+      donationBody({ type: 'Subscription', message: 'grazie ancora INK-SUBSCR', amount: '3.00' })
+    );
+
+    assert.deepEqual(confirmation, { paymentRef: 'INK-SUBSCR', amountCents: 300, paid: true });
   });
 
   it('parses the amount without ever going through a float', async () => {

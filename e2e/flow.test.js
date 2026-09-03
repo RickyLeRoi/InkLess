@@ -73,7 +73,7 @@ describe('dal messaggio alla carta', () => {
     assert.equal(message.submittedStatus, 'pending', 'un termine ambiguo va all admin, non in pagina');
     assert.equal(message.author, 'Doe#001', 'senza handle il messaggio riceve un identita generata');
 
-    const job = await requestAndPay(message.id, 100, 'stampatore');
+    const job = await requestAndPay(message.id, 200, 'stampatore');
 
     // Subscribed before paying, exactly like the browser sitting on the job page.
     const stream = openEventStream(`${stack.baseUrl}/api/jobs/${job.jobId}/stream`);
@@ -94,7 +94,7 @@ describe('dal messaggio alla carta', () => {
       ['awaiting_payment', 'queued', 'printing', 'completed'],
       `chi ha pagato deve vedere ogni passaggio, "in coda" compreso: ${seen.join(' -> ')}`
     );
-    assert.ok(completed.data.videoUrl, 'a 1,00 EUR il lavoro deve restituire l URL della clip');
+    assert.ok(completed.data.videoUrl, 'a 2,00 EUR il lavoro deve restituire l URL della clip');
 
     // Flattened before matching: the receipt is wrapped to a 32-column roll, so both
     // the text and the attribution legitimately arrive split across lines.
@@ -119,12 +119,12 @@ describe('dal messaggio alla carta', () => {
     const message = await publish('un saluto dal collaudo');
     assert.equal(message.submittedStatus, 'approved');
 
-    const job = await requestAndPay(message.id, 60);
+    const job = await requestAndPay(message.id, 100);
     await job.pay();
 
     const parked = await stack.json('GET', `/api/jobs/${job.jobId}`);
     assert.equal(parked.body.status, 'queued', 'senza nodo il lavoro resta in coda, non fallisce');
-    assert.equal(parked.body.includesVideo, false, 'sotto 1,00 EUR non si registra nulla');
+    assert.equal(parked.body.includesVideo, false, 'sotto 2,00 EUR non si registra nulla');
 
     await stack.startDaemon();
 

@@ -8,14 +8,14 @@ import { rememberPendingKofiCode } from '../storage.js';
 const TIERS = [
   {
     id: 'print',
-    amountCents: 100,
-    title: '1,00 € — stampa + video',
+    amountCents: 200,
+    title: '2,00 € — stampa + video',
     detail: 'Stampiamo il messaggio e ti mandiamo la clip della stampante che lo sputa fuori.'
   },
   {
     id: 'paper',
-    amountCents: 60,
-    title: '0,60 € — solo stampa',
+    amountCents: 100,
+    title: '1,00 € — solo stampa',
     detail: 'Finisce su carta termica, senza video.'
   }
 ];

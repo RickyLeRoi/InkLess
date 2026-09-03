@@ -260,7 +260,7 @@ describe('print and payment over HTTP', () => {
     const booked = await server.inject({
       method: 'POST',
       url: `/api/messages/${created.id}/print`,
-      payload: { amountCents: 100, printerInstagram: '@stampatore' }
+      payload: { amountCents: 200, printerInstagram: '@stampatore' }
     });
     assert.equal(booked.statusCode, 201);
     const { jobId, redirectUrl } = booked.json();
@@ -322,7 +322,7 @@ describe('hardware surface', () => {
       await server.inject({
         method: 'POST',
         url: `/api/messages/${created.id}/print`,
-        payload: { amountCents: 60 }
+        payload: { amountCents: 100 }
       })
     ).json();
 
