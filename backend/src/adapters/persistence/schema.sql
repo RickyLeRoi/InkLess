@@ -74,3 +74,25 @@ CREATE TABLE IF NOT EXISTS counters (
   name   TEXT PRIMARY KEY,
   value  INTEGER NOT NULL
 );
+
+-- 20260903 ++ RG #kofi_unmatched_donations
+-- Ko-fi has no API to open a payment session, so a checkout cannot be pre-tagged with a
+-- reference the way Stripe/PayPal ones are: KofiPaymentAdapter mints a short code up
+-- front and asks the payer to carry it into Ko-fi's free-text message field. When a
+-- webhook's message does not contain a code that matches a real print job — typo,
+-- skipped field, wrong tab — the donation lands here instead of being dropped, so an
+-- admin can still attach it to the right job by hand.
+CREATE TABLE IF NOT EXISTS kofi_unmatched_donations (
+  id                   TEXT PRIMARY KEY,
+  kofi_transaction_id  TEXT NOT NULL UNIQUE,
+  amount_cents         INTEGER NOT NULL CHECK (amount_cents >= 0),
+  from_name            TEXT,
+  message              TEXT,
+  email                TEXT,
+  received_at          TEXT NOT NULL,
+  matched_job_id       TEXT REFERENCES print_jobs (id) ON DELETE SET NULL,
+  matched_at           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_kofi_unmatched_pending
+  ON kofi_unmatched_donations (matched_job_id, received_at);

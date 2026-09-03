@@ -83,6 +83,8 @@ export function AdminPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [drafts, setDrafts] = useState(/** @type {Record<string, any>} */ ({}));
+  const [kofiDonations, setKofiDonations] = useState(/** @type {any[]} */ ([]));
+  const [kofiJobDrafts, setKofiJobDrafts] = useState(/** @type {Record<string, string>} */ ({}));
 
   const reload = useCallback(() => {
     if (!authed) return;
@@ -102,6 +104,35 @@ export function AdminPage() {
   }, [authed, status]);
 
   useEffect(reload, [reload]);
+
+  const reloadKofi = useCallback(() => {
+    if (!authed) return;
+    adminFetch('/kofi/unmatched')
+      .then((data) => setKofiDonations(data.items))
+      .catch((caught) => setError(caught.message));
+  }, [authed]);
+
+  useEffect(reloadKofi, [reloadKofi]);
+
+  /** @param {string} donationId */
+  async function matchKofi(donationId) {
+    const jobId = (kofiJobDrafts[donationId] ?? '').trim();
+    if (!jobId) return;
+    try {
+      await adminFetch(`/kofi/unmatched/${donationId}/match`, {
+        method: 'POST',
+        body: JSON.stringify({ jobId })
+      });
+      setKofiJobDrafts((current) => {
+        const next = { ...current };
+        delete next[donationId];
+        return next;
+      });
+      reloadKofi();
+    } catch (caught) {
+      setError(caught.message);
+    }
+  }
 
   if (!authed) {
     return (
@@ -241,6 +272,36 @@ export function AdminPage() {
         </div>
       ) : null}
       {notice ? <div className="notice">{notice}</div> : null}
+
+      {kofiDonations.length > 0 ? (
+        <div className="admin-row">
+          <h3>Donazioni Ko-fi da abbinare</h3>
+          <p className="muted">
+            Il codice non è arrivato o non combaciava con nessun job: cerca l&apos;id del
+            print job (dalla pagina /job/... del pagante) e abbinalo qui a mano.
+          </p>
+          {kofiDonations.map((donation) => (
+            <div key={donation.id} className="handle-row">
+              <span className="muted">
+                {new Date(donation.receivedAt).toLocaleString('it-IT')} —{' '}
+                {(donation.amountCents / 100).toFixed(2)} € — {donation.fromName ?? 'anonimo'}
+                {donation.message ? ` — "${donation.message}"` : ''}
+              </span>
+              <input
+                type="text"
+                placeholder="id del print job"
+                value={kofiJobDrafts[donation.id] ?? ''}
+                onChange={(event) =>
+                  setKofiJobDrafts((current) => ({ ...current, [donation.id]: event.target.value }))
+                }
+              />
+              <button className="ghost" onClick={() => matchKofi(donation.id)}>
+                Abbina
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {items.length === 0 ? <p className="muted">Niente da moderare qui.</p> : null}
 

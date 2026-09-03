@@ -34,7 +34,7 @@ export class FakePaymentAdapter {
    * @returns {Promise<import('../../ports/PaymentPort.js').PaymentConfirmation>}
    */
   async verifyCallback(rawBody) {
-    /** @type {{ paymentRef?: string, paid?: boolean }} */
+    /** @type {{ paymentRef?: string, paid?: boolean, amountCents?: number }} */
     let payload;
     try {
       payload = JSON.parse(rawBody.toString('utf8'));
@@ -50,7 +50,9 @@ export class FakePaymentAdapter {
 
     return {
       paymentRef,
-      amountCents: issued.amountCents,
+      // Overridable so tests can simulate a payer confirming a different amount than
+      // the one requested — the closest a fake gets to Ko-fi's donor-controlled amount.
+      amountCents: typeof payload.amountCents === 'number' ? payload.amountCents : issued.amountCents,
       paid: payload.paid !== false
     };
   }

@@ -5,10 +5,12 @@ import { beforeEach, describe, it } from 'node:test';
 import { createDatabase } from '../../src/adapters/persistence/database.js';
 import { SqliteMessageRepository } from '../../src/adapters/persistence/SqliteMessageRepository.js';
 import { SqlitePrintJobRepository } from '../../src/adapters/persistence/SqlitePrintJobRepository.js';
+import { SqliteUnmatchedDonationRepository } from '../../src/adapters/persistence/SqliteUnmatchedDonationRepository.js';
 import { RegexModerationAdapter } from '../../src/adapters/moderation/RegexModerationAdapter.js';
 import { FakePaymentAdapter } from '../../src/adapters/payment/FakePaymentAdapter.js';
 import { InProcessPrintQueue } from '../../src/adapters/queue/InProcessPrintQueue.js';
 import { ConfirmPayment } from '../../src/application/ConfirmPayment.js';
+import { MatchKofiDonation } from '../../src/application/MatchKofiDonation.js';
 import { RequestPrint } from '../../src/application/RequestPrint.js';
 import { SubmitMessage } from '../../src/application/SubmitMessage.js';
 import { TrackPrintJob } from '../../src/application/TrackPrintJob.js';
@@ -21,12 +23,14 @@ beforeEach(() => {
   const db = createDatabase(':memory:');
   const messages = new SqliteMessageRepository(db);
   const jobs = new SqlitePrintJobRepository(db);
+  const unmatchedDonations = new SqliteUnmatchedDonationRepository(db);
   const payments = new FakePaymentAdapter();
   const printQueue = new InProcessPrintQueue();
 
   context = {
     messages,
     jobs,
+    unmatchedDonations,
     payments,
     printQueue,
     submit: new SubmitMessage({ messages, moderation: new RegexModerationAdapter() }),
@@ -37,6 +41,7 @@ beforeEach(() => {
       publicBaseUrl: 'https://inkless.test'
     }),
     confirmPayment: new ConfirmPayment({ messages, jobs, payments, printQueue }),
+    matchKofiDonation: new MatchKofiDonation({ messages, jobs, unmatchedDonations, printQueue }),
     track: new TrackPrintJob({ messages, jobs })
   };
 });
@@ -225,5 +230,112 @@ describe('paid print flow', () => {
 
     const stored = await context.messages.findById(message.id);
     assert.equal(stored.printCount, 0);
+  });
+
+  /**
+   * A payer whose actual payment differs from what was requested — Ko-fi's donor
+   * types the amount, nobody else fixes it. See ConfirmPayment#donor_controlled_amount.
+   *
+   * @param {string} paymentRef
+   * @param {number} amountCents
+   */
+  function callbackBodyWithAmount(paymentRef, amountCents) {
+    return Buffer.from(JSON.stringify({ paymentRef, paid: true, amountCents }), 'utf8');
+  }
+
+  it('upgrades to the video tier when the confirmed amount is higher than requested', async () => {
+    const { job } = await bookPrint(60);
+    /** @type {any[]} */
+    const tickets = [];
+    context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
+
+    await context.confirmPayment.execute(callbackBodyWithAmount(job.paymentRef, 150), {});
+
+    assert.equal(tickets[0].includesVideo, true);
+    const stored = await context.jobs.findById(job.id);
+    assert.equal(stored.amountCents, 150);
+  });
+
+  it('refuses a confirmation for less than the requested amount', async () => {
+    const { job } = await bookPrint(100);
+
+    await assert.rejects(
+      () => context.confirmPayment.execute(callbackBodyWithAmount(job.paymentRef, 60), {}),
+      /lower than the requested job/
+    );
+
+    const stored = await context.jobs.findById(job.id);
+    assert.equal(stored.status, PrintJobStatus.AWAITING_PAYMENT);
+  });
+});
+
+describe('matching an unmatched Ko-fi donation by hand', () => {
+  /** @param {number} amountCents */
+  async function bookPrint(amountCents) {
+    const { message } = await context.submit.execute({
+      text: 'un messaggio da stampare',
+      authorInstagram: '@autore'
+    });
+    const { job } = await context.requestPrint.execute({
+      messageId: message.id,
+      printerInstagram: '@stampatore',
+      amountCents
+    });
+    return { message, job };
+  }
+
+  /** @param {{ amountCents: number, message?: string | null }} input */
+  async function logDonation({ amountCents, message = null }) {
+    const donation = {
+      id: `donation-${Math.random().toString(36).slice(2)}`,
+      kofiTransactionId: `tx-${Math.random().toString(36).slice(2)}`,
+      amountCents,
+      fromName: 'Un sostenitore',
+      message,
+      email: 'payer@example.invalid',
+      receivedAt: new Date(),
+      matchedJobId: null,
+      matchedAt: null
+    };
+    await context.unmatchedDonations.save(donation);
+    return donation;
+  }
+
+  it('queues the job an admin attaches the donation to', async () => {
+    const { job } = await bookPrint(60);
+    const donation = await logDonation({ amountCents: 60 });
+    /** @type {any[]} */
+    const tickets = [];
+    context.printQueue.subscribe(/** @param {any} ticket */ (ticket) => tickets.push(ticket));
+
+    const result = await context.matchKofiDonation.execute(donation.id, job.id);
+
+    assert.equal(result.queued, true);
+    assert.equal(tickets.length, 1);
+    const stored = await context.jobs.findById(job.id);
+    assert.equal(stored.status, PrintJobStatus.QUEUED);
+  });
+
+  it('refuses to match the same donation twice', async () => {
+    const { job } = await bookPrint(60);
+    const other = await bookPrint(60);
+    const donation = await logDonation({ amountCents: 60 });
+
+    await context.matchKofiDonation.execute(donation.id, job.id);
+
+    await assert.rejects(
+      () => context.matchKofiDonation.execute(donation.id, other.job.id),
+      /already matched/
+    );
+  });
+
+  it('refuses a donation smaller than the job it is pointed at', async () => {
+    const { job } = await bookPrint(100);
+    const donation = await logDonation({ amountCents: 60 });
+
+    await assert.rejects(
+      () => context.matchKofiDonation.execute(donation.id, job.id),
+      /smaller than the requested job/
+    );
   });
 });

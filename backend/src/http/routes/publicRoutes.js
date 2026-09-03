@@ -135,12 +135,16 @@ export async function publicRoutes(fastify, options) {
         request.body
       );
 
-      const { job, redirectUrl } = await requestPrint.execute({
+      const { job, redirectUrl, redirectMode } = await requestPrint.execute({
         messageId: id,
         printerInstagram: body.printerInstagram,
         amountCents: body.amountCents
       });
-      return reply.status(201).send({ jobId: job.id, redirectUrl });
+      // paymentRef doubles as the code a Ko-fi payer must carry into the donation
+      // message; harmless to show for Stripe/PayPal, where nobody types it anywhere.
+      return reply
+        .status(201)
+        .send({ jobId: job.id, redirectUrl, redirectMode: redirectMode ?? 'navigate', paymentRef: job.paymentRef });
     }
   );
 

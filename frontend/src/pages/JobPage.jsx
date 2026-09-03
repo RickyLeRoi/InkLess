@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchJob, streamJob } from '../api.js';
 import { navigate } from '../router.js';
+import { readPendingKofiCode } from '../storage.js';
 
 // 20260831 ++ RG #clip_url_must_be_safe
 // The backend already refuses anything but http/https, so this is the second lock on
@@ -67,11 +68,19 @@ export function JobPage({ jobId }) {
   if (!job) return <div className="skeleton" />;
 
   const clipUrl = safeClipUrl(job.videoUrl);
+  const kofiCode = job.status === 'awaiting_payment' ? readPendingKofiCode(jobId) : null;
 
   return (
     <section>
       <h2>Stampa in corso</h2>
       <p>{STATUS_COPY[job.status] ?? job.status}</p>
+
+      {kofiCode ? (
+        <div className="notice" data-tone="ok">
+          Hai pagato su Ko-fi? Incolla questo codice nel campo messaggio della donazione,
+          altrimenti non riusciamo ad abbinarla da soli: <strong>{kofiCode}</strong>
+        </div>
+      ) : null}
 
       {job.includesVideo && job.status !== 'completed' && job.status !== 'failed' ? (
         <p className="muted">

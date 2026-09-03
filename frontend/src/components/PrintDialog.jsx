@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { requestPrint } from '../api.js';
+import { navigate } from '../router.js';
+import { rememberPendingKofiCode } from '../storage.js';
 
 const TIERS = [
   {
@@ -31,11 +33,24 @@ export function PrintDialog({ message, onClose }) {
     setBusy(true);
     setError('');
     try {
-      const { redirectUrl } = await requestPrint(message.id, {
+      const { jobId, redirectUrl, redirectMode, paymentRef } = await requestPrint(message.id, {
         amountCents,
         printerInstagram: handle
       });
-      window.location.href = redirectUrl;
+
+      // 20260903 ++ RG #kofi_has_no_return_url
+      // Stripe/PayPal bring the browser back on their own once paid, so a full
+      // navigation to their hosted checkout is fine. Ko-fi never does — there is no
+      // return URL to give it — so instead the payment opens in another tab and this
+      // one goes straight to the job's own wait page, showing paymentRef so the payer
+      // can carry it into Ko-fi's message field.
+      if (redirectMode === 'newTab') {
+        if (paymentRef) rememberPendingKofiCode(jobId, paymentRef);
+        window.open(redirectUrl, '_blank', 'noopener');
+        navigate(`/job/${jobId}`);
+      } else {
+        window.location.href = redirectUrl;
+      }
     } catch (caught) {
       setError(caught.message);
       setBusy(false);

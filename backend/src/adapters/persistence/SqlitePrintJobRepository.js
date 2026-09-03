@@ -37,6 +37,12 @@ export class SqlitePrintJobRepository {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            payment_ref = excluded.payment_ref,
+           -- 20260903 ** RG #donor_controlled_amount
+           -- ConfirmPayment can now raise amountCents when a Ko-fi payer sends more
+           -- than the job was requested for (see ConfirmPayment.js); without this the
+           -- upgrade computed in memory never reached the row, and includesVideo on
+           -- the next read would derive from the stale, pre-upgrade figure.
+           amount_cents = excluded.amount_cents,
            status = excluded.status,
            video_url = excluded.video_url,
            failure_reason = excluded.failure_reason`

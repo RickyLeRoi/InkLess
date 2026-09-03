@@ -25,7 +25,7 @@ function constantTimeEquals(a, b) {
  * @param {any} options
  */
 export async function adminRoutes(fastify, options) {
-  const { config, moderateMessage, escalation, printQueue } = options;
+  const { config, moderateMessage, escalation, printQueue, matchKofiDonation } = options;
 
   // 20260831 ++ RG #admin_rate_limit
   // Basic auth on its own has no lockout: without this, a weak admin password can be
@@ -194,6 +194,41 @@ export async function adminRoutes(fastify, options) {
         author: message.author,
         handleCensored: message.handleCensored
       };
+    }
+  );
+
+  // Donations KofiPaymentAdapter could not place on a job by itself — see
+  // #kofi_unmatched_fallback in KofiPaymentAdapter.js.
+  fastify.get('/kofi/unmatched', async () => {
+    const donations = await matchKofiDonation.listUnmatched();
+    return {
+      items: donations.map((/** @type {any} */ donation) => ({
+        id: donation.id,
+        amountCents: donation.amountCents,
+        fromName: donation.fromName,
+        message: donation.message,
+        email: donation.email,
+        receivedAt: donation.receivedAt.toISOString()
+      }))
+    };
+  });
+
+  fastify.post(
+    '/kofi/unmatched/:id/match',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['jobId'],
+          additionalProperties: false,
+          properties: { jobId: { type: 'string', minLength: 1 } }
+        }
+      }
+    },
+    async (request) => {
+      const { id } = /** @type {{ id: string }} */ (request.params);
+      const { jobId } = /** @type {{ jobId: string }} */ (request.body);
+      return matchKofiDonation.execute(id, jobId);
     }
   );
 }

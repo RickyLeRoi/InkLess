@@ -27,7 +27,7 @@ export class RequestPrint {
    * @param {string} input.messageId
    * @param {unknown} [input.printerInstagram]
    * @param {number} input.amountCents
-   * @returns {Promise<{ job: PrintJob, redirectUrl: string }>}
+   * @returns {Promise<{ job: PrintJob, redirectUrl: string, redirectMode?: 'navigate' | 'newTab' }>}
    */
   async execute(input) {
     const message = await this.messages.findById(input.messageId);
@@ -55,6 +55,6 @@ export class RequestPrint {
     job.paymentRef = checkout.paymentRef;
     await this.jobs.save(job);
 
-    return { job, redirectUrl: checkout.redirectUrl };
+    return { job, redirectUrl: checkout.redirectUrl, redirectMode: checkout.redirectMode };
   }
 }

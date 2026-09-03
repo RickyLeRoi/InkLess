@@ -17,6 +17,10 @@
  * @typedef {object} CheckoutTicket
  * @property {string} paymentRef opaque provider reference stored on the print job
  * @property {string} redirectUrl where the browser must be sent to pay
+ * @property {'navigate' | 'newTab'} [redirectMode] 'navigate' (default) leaves the site
+ *   and relies on the provider's own return URL; 'newTab' is for a provider with no
+ *   return URL at all (Ko-fi), where the browser must stay on the job's own wait page
+ *   while the payment happens in another tab
  *
  * @typedef {object} PaymentConfirmation
  * @property {string} paymentRef

@@ -1,7 +1,7 @@
 // backend/src/application/ConfirmPayment.js
 
 import { NotFoundError, ValidationError } from '../domain/errors.js';
-import { formatAttribution } from '../domain/identity.js';
+import { queuePaidJob } from './queuePaidJob.js';
 
 export class ConfirmPayment {
   /**
@@ -32,32 +32,21 @@ export class ConfirmPayment {
     const job = await this.jobs.findByPaymentRef(confirmation.paymentRef);
     if (!job) throw new NotFoundError('PrintJob for payment', confirmation.paymentRef);
 
-    // The tier that decides "video or no video" is derived from the amount, so a
-    // callback claiming a different figure than the job was created with is refused.
-    if (confirmation.amountCents !== job.amountCents) {
-      throw new ValidationError('Confirmed amount does not match the requested job');
+    // 20260903 ** RG #donor_controlled_amount
+    // Was a strict equality: fine when the provider itself fixes the checkout amount
+    // (Stripe, PayPal), but Ko-fi's payer can type anything on the donation page. A
+    // callback for less than what was requested is still refused — that is the tier
+    // the job was queued for — but paying more now upgrades amountCents before
+    // markPaid(), so a generous Ko-fi payer unlocks the video tier automatically
+    // (includesVideo is derived from amountCents, nothing else to change).
+    if (confirmation.amountCents < job.amountCents) {
+      throw new ValidationError('Confirmed amount is lower than the requested job');
     }
+    job.amountCents = confirmation.amountCents;
 
-    const justQueued = job.markPaid();
-    await this.jobs.save(job);
-
-    if (!justQueued) {
-      return { queued: false, jobId: job.id, reason: 'already_processed' };
-    }
-
-    const message = await this.messages.findById(job.messageId);
-    if (!message) throw new NotFoundError('Message', job.messageId);
-
-    await this.printQueue.publish({
-      jobId: job.id,
-      text: message.text,
-      attribution: formatAttribution(
-        message.author,
-        job.printerInstagram ? `@${job.printerInstagram}` : null
-      ),
-      includesVideo: job.includesVideo
-    });
-
-    return { queued: true, jobId: job.id };
+    return queuePaidJob(
+      { messages: this.messages, jobs: this.jobs, printQueue: this.printQueue },
+      job
+    );
   }
 }

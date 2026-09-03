@@ -40,3 +40,41 @@ export function forgetAll() {
     // Nothing to do: there was nothing readable to begin with.
   }
 }
+
+const KOFI_CODE_KEY = 'inkless.pendingKofiCode';
+const MAX_TRACKED_CODES = 10;
+
+/**
+ * The code a Ko-fi payer must carry into the donation message. Ko-fi has no return
+ * URL, so PrintDialog opens it in another tab and sends this one straight to the job's
+ * wait page instead — this is how that page still gets to show the code (see
+ * PrintDialog#kofi_has_no_return_url).
+ *
+ * @param {string} jobId
+ * @param {string} code
+ */
+export function rememberPendingKofiCode(jobId, code) {
+  try {
+    const raw = window.localStorage.getItem(KOFI_CODE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const existing = parsed && typeof parsed === 'object' ? parsed : {};
+    const trimmed = Object.fromEntries(Object.entries(existing).slice(-(MAX_TRACKED_CODES - 1)));
+    window.localStorage.setItem(KOFI_CODE_KEY, JSON.stringify({ ...trimmed, [jobId]: code }));
+  } catch {
+    // The payer just won't see the code again if they leave and come back.
+  }
+}
+
+/**
+ * @param {string} jobId
+ * @returns {string | null}
+ */
+export function readPendingKofiCode(jobId) {
+  try {
+    const raw = window.localStorage.getItem(KOFI_CODE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return typeof parsed?.[jobId] === 'string' ? parsed[jobId] : null;
+  } catch {
+    return null;
+  }
+}

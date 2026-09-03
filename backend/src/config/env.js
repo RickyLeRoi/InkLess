@@ -103,14 +103,31 @@ export function loadConfig() {
     },
 
     payments: {
-      // stripe | paypal | fake
+      // stripe | paypal | kofi | fake. Decides which provider RequestPrint uses to
+      // open a *new* checkout; every provider below with credentials present still
+      // gets its webhook route mounted regardless, so a late callback from whichever
+      // provider was active before a switch still resolves. See composition.js.
       provider: process.env.PAYMENT_PROVIDER ?? 'fake',
       stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
       stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+      // Documentation of what is registered in the Stripe dashboard; Stripe's test/live
+      // mode is decided by which secret key is configured, so neither is read by code.
+      stripeWebhookEndpoint: process.env.STRIPE_WEBHOOK_ENDPOINT ?? '',
+      stripeWebhookId: process.env.STRIPE_WEBHOOK_ID ?? '',
+      stripeEnvironment: process.env.STRIPE_ENVIRONMENT ?? 'live',
       paypalClientId: process.env.PAYPAL_CLIENT_ID ?? '',
       paypalClientSecret: process.env.PAYPAL_CLIENT_SECRET ?? '',
       paypalWebhookId: process.env.PAYPAL_WEBHOOK_ID ?? '',
-      paypalEnvironment: process.env.PAYPAL_ENVIRONMENT ?? 'live'
+      paypalEnvironment: process.env.PAYPAL_ENVIRONMENT ?? 'live',
+      // Documentation of what is registered in the PayPal dashboard; not read by code.
+      paypalWebhookEndpoint: process.env.PAYPAL_WEBHOOK_ENDPOINT ?? '',
+      // The verification_token Ko-fi echoes on every callback — see KofiPaymentAdapter.
+      kofiWebhookSecret: process.env.KOFI_WEBHOOK_SECRET ?? '',
+      // Documentation of what is registered in the Ko-fi dashboard; not read by code.
+      kofiWebhookEndpoint: process.env.KOFI_WEBHOOK_ENDPOINT ?? '',
+      // The creator's public Ko-fi page, e.g. https://ko-fi.com/rickydev — required to
+      // open a Ko-fi checkout at all, since there is no API to ask for a session url.
+      kofiPageUrl: process.env.KOFI_PAGE_URL ?? ''
     }
   };
 }
