@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchJob, streamJob } from '../api.js';
 import { navigate } from '../router.js';
-import { readPendingKofiCode } from '../storage.js';
+import { readPendingKofi } from '../storage.js';
 
 // 20260831 ++ RG #clip_url_must_be_safe
 // The backend already refuses anything but http/https, so this is the second lock on
@@ -68,17 +68,30 @@ export function JobPage({ jobId }) {
   if (!job) return <div className="skeleton" />;
 
   const clipUrl = safeClipUrl(job.videoUrl);
-  const kofiCode = job.status === 'awaiting_payment' ? readPendingKofiCode(jobId) : null;
+  const pendingKofi = job.status === 'awaiting_payment' ? readPendingKofi(jobId) : null;
 
   return (
     <section>
       <h2>Stampa in corso</h2>
       <p>{STATUS_COPY[job.status] ?? job.status}</p>
 
-      {kofiCode ? (
+      {pendingKofi ? (
         <div className="notice" data-tone="ok">
-          Hai pagato su Ko-fi? Incolla questo codice nel campo messaggio della donazione,
-          altrimenti non riusciamo ad abbinarla da soli: <strong>{kofiCode}</strong>
+          <p>
+            Hai pagato su Ko-fi? Incolla questo codice nel campo messaggio della donazione,
+            altrimenti non riusciamo ad abbinarla da soli: <strong>{pendingKofi.code}</strong>
+          </p>
+          {/* 20260903 ++ RG #kofi_reopen: closing the Ko-fi tab without paying used to leave
+              this page with no way back in short of re-submitting the whole print form. */}
+          <div className="receipt__actions">
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => window.open(pendingKofi.redirectUrl, '_blank', 'noopener')}
+            >
+              Hai chiuso Ko-fi senza pagare? Riapri
+            </button>
+          </div>
         </div>
       ) : null}
 

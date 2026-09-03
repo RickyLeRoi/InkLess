@@ -45,21 +45,27 @@ const KOFI_CODE_KEY = 'inkless.pendingKofiCode';
 const MAX_TRACKED_CODES = 10;
 
 /**
- * The code a Ko-fi payer must carry into the donation message. Ko-fi has no return
- * URL, so PrintDialog opens it in another tab and sends this one straight to the job's
- * wait page instead — this is how that page still gets to show the code (see
- * PrintDialog#kofi_has_no_return_url).
+ * The code a Ko-fi payer must carry into the donation message, plus the page URL
+ * they were sent to. Ko-fi has no return URL, so PrintDialog opens it in another tab
+ * and sends this one straight to the job's wait page instead — this is how that page
+ * still gets to show the code, and re-open Ko-fi if the payer closed that tab without
+ * paying (see PrintDialog#kofi_has_no_return_url).
+ *
+ * 20260903 ++ RG #kofi_reopen
  *
  * @param {string} jobId
- * @param {string} code
+ * @param {{ code: string, redirectUrl: string }} pending
  */
-export function rememberPendingKofiCode(jobId, code) {
+export function rememberPendingKofiCode(jobId, { code, redirectUrl }) {
   try {
     const raw = window.localStorage.getItem(KOFI_CODE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     const existing = parsed && typeof parsed === 'object' ? parsed : {};
     const trimmed = Object.fromEntries(Object.entries(existing).slice(-(MAX_TRACKED_CODES - 1)));
-    window.localStorage.setItem(KOFI_CODE_KEY, JSON.stringify({ ...trimmed, [jobId]: code }));
+    window.localStorage.setItem(
+      KOFI_CODE_KEY,
+      JSON.stringify({ ...trimmed, [jobId]: { code, redirectUrl } })
+    );
   } catch {
     // The payer just won't see the code again if they leave and come back.
   }
@@ -67,13 +73,14 @@ export function rememberPendingKofiCode(jobId, code) {
 
 /**
  * @param {string} jobId
- * @returns {string | null}
+ * @returns {{ code: string, redirectUrl: string } | null}
  */
-export function readPendingKofiCode(jobId) {
+export function readPendingKofi(jobId) {
   try {
     const raw = window.localStorage.getItem(KOFI_CODE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
-    return typeof parsed?.[jobId] === 'string' ? parsed[jobId] : null;
+    const entry = parsed?.[jobId];
+    return typeof entry?.code === 'string' && typeof entry?.redirectUrl === 'string' ? entry : null;
   } catch {
     return null;
   }

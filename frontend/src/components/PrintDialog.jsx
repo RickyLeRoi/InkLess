@@ -28,6 +28,11 @@ export function PrintDialog({ message, onClose }) {
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // 20260903 ++ RG #kofi_code_before_redirect
+  // Set once requestPrint comes back with a Ko-fi checkout, so the payer sees the code
+  // they must carry into Ko-fi's message field before this dialog sends them there —
+  // rather than after, when the Ko-fi tab has already grabbed their attention.
+  const [kofiStep, setKofiStep] = useState(/** @type {{ jobId: string, redirectUrl: string, code: string } | null} */ (null));
 
   async function confirm() {
     setBusy(true);
@@ -41,13 +46,13 @@ export function PrintDialog({ message, onClose }) {
       // 20260903 ++ RG #kofi_has_no_return_url
       // Stripe/PayPal bring the browser back on their own once paid, so a full
       // navigation to their hosted checkout is fine. Ko-fi never does — there is no
-      // return URL to give it — so instead the payment opens in another tab and this
-      // one goes straight to the job's own wait page, showing paymentRef so the payer
-      // can carry it into Ko-fi's message field.
+      // return URL to give it — so instead the payment opens in another tab, and this
+      // dialog switches to a confirmation step showing paymentRef before actually
+      // opening it, so the payer can carry the code into Ko-fi's message field.
       if (redirectMode === 'newTab') {
-        if (paymentRef) rememberPendingKofiCode(jobId, paymentRef);
-        window.open(redirectUrl, '_blank', 'noopener');
-        navigate(`/job/${jobId}`);
+        if (paymentRef) rememberPendingKofiCode(jobId, { code: paymentRef, redirectUrl });
+        setBusy(false);
+        setKofiStep({ jobId, redirectUrl, code: paymentRef });
       } else {
         window.location.href = redirectUrl;
       }
@@ -55,6 +60,41 @@ export function PrintDialog({ message, onClose }) {
       setError(caught.message);
       setBusy(false);
     }
+  }
+
+  // 20260903 ++ RG #kofi_dialog_must_close
+  // Without onClose() here, App.jsx keeps this dialog mounted as an overlay on top of
+  // the JobPage that navigate() reveals underneath — stuck on its own busy state
+  // forever, since nothing else ever clears it.
+  function openKofi() {
+    window.open(kofiStep.redirectUrl, '_blank', 'noopener');
+    navigate(`/job/${kofiStep.jobId}`);
+    onClose();
+  }
+
+  if (kofiStep) {
+    return (
+      <div className="dialog" role="dialog" aria-modal="true" aria-label="Codice Ko-fi">
+        <div className="dialog__panel">
+          <h2>Prima di andare su Ko-fi</h2>
+          <p>
+            Scrivi questo codice nel campo <strong>messaggio</strong> della donazione, altrimenti
+            non riusciamo ad abbinarla da soli:
+          </p>
+          <p className="notice" data-tone="ok">
+            <strong>{kofiStep.code}</strong>
+          </p>
+          <div className="receipt__actions">
+            <button type="button" onClick={openKofi}>
+              Apri Ko-fi e paga
+            </button>
+            <button type="button" className="ghost" onClick={onClose}>
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const attribution = handle
