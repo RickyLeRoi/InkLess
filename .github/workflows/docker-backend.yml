@@ -23,14 +23,74 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # 20260920 ** RG #multi_arch_for_rpi5
+    # amd64 for the home server (Dell OptiPlex), arm64 because rickypi (RPi5) now runs
+    # this stack too. Each leg builds natively on its own runner architecture instead
+    # of cross-emulating arm64 with QEMU on an amd64 runner, which crashed npm's
+    # install step under emulation ("Illegal instruction, core dumped") after
+    # running for the better part of an hour. Native arm64 GitHub-hosted runners
+    # (ubuntu-24.04-arm) are free on public repos, which this one is.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
+      - name: Prepare
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
       # Pinned to commit SHA, not a tag: tags on third-party actions can move (see the
       # 2025 tj-actions/changed-files incident), and this workflow runs with
       # packages:write against GHCR. Comment carries the human-readable version.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: docker/backend.Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=backend-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=backend-${{ matrix.platform }}
+
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-backend-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-backend-*
+          merge-multiple: true
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -48,17 +108,11 @@ jobs:
             type=raw,value=latest
             type=sha
 
-      # 20260920 ** RG #multi_arch_for_rpi5
-      # amd64 for the home server (Dell OptiPlex), arm64 because rickypi (RPi5) now
-      # runs this stack too. QEMU (setup-qemu-action above) cross-builds the arm64
-      # leg since this runner is amd64-only.
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          file: docker/backend.Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${{ env.IMAGE }}@sha256:%s " *)
+
+      - name: Inspect image
+        run: docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
