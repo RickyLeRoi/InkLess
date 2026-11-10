@@ -17,9 +17,10 @@
 
 # 20260831 ++ RG #blast_radius_stops_here
 # Every service below carries mem_limit / cpus / pids_limit and a capped log driver.
-# This host is not dedicated: paperless, nextcloud, vaultwarden and pihole live on it
-# too. Without a ceiling, an OOM here does not take down InkLess, it takes down the
-# DNS of the whole house and the password manager with it. The numbers are deliberately
+# 20261110 ** RG #host_moved
+# This host is not dedicated: adguardhome, uptime-kuma and pairdrop live on it too.
+# Without a ceiling, an OOM here does not take down InkLess, it takes down the DNS
+# and DHCP of the whole house with it. The numbers are deliberately
 # generous — they are a fence against runaway, not a tuning exercise.
 
 x-inkless: &inkless
